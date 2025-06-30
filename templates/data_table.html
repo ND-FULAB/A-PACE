@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Table</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: row;
+            /* font-family: Arial, sans-serif; */
+        }
+        .sidebar {
+            margin-right: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar button {
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+            width: 150px;
+        }
+        .home-button {
+            background-color: blue;
+            color: white;
+            cursor: pointer;
+        }
+        .upload-button {
+            background-color: #4CAF50; /* Green */
+            color: white;
+            cursor: pointer;
+        }
+        .pass-button {
+            background-color: #008CBA; /* Blue */
+            color: white;
+            cursor: pointer;
+        }
+        .fail-button {
+            background-color: #f44336; /* Red */
+            color: white;
+            cursor: pointer;
+        }
+        .add-info-button {
+            background-color: #e7e7e7; /* Gray */
+            color: black;
+            cursor: pointer;
+        }
+        .graph-button {
+            background-color: #555555; /* Black */
+            color: white;
+            cursor: pointer;
+        }
+        .select-all-button {
+            background-color: rgb(150, 85, 85); /* Dark Brown */
+            color: white;
+            cursor: pointer;
+        }
+        .deselect-all-button {
+            background-color: rgb(79, 149, 174); /* Dark Brown */
+            color: white;
+            cursor: pointer;
+        }
+        .save-button {
+            background-color: rgb(177, 158, 76); /* Light Brown */
+            color: white;
+            cursor: pointer;
+        }
+        .export-button {
+            background-color: #ff9800; /* Orange */
+            color: white;
+            cursor: pointer;
+        }
+        .apply-button {
+            background-color: #7B3F00; 
+            color: white;
+            cursor: pointer;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+            word-wrap: break-word;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .control-panel {
+            background-color: #f9f9f9;
+            /* Light gray background */
+            border: 2px solid #ddd;
+            /* Light border */
+            padding: 20px;
+            /* Space inside */
+            margin-bottom: 20px;
+            /* Space outside */
+            width: 70%;
+            /* Full width */
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            /* Subtle shadow */
+        }
+        .control-panel label {
+            margin-right: 10px;
+            /* Space between labels and inputs */
+        }
+        .control-panel input,
+        .control-panel select {
+            margin-right: 20px;
+            /* Space between controls */
+        }
+        .control-panel input[type="text"] {
+            width: 200px;
+            /* Text input width */
+        }
+        .control-panel input[type="number"] {
+            width: 60px;
+            /* Number input width */
+        }
+        .form-container {
+            flex-grow: 1;
+            /* Fill available space */
+            padding: 20px;
+            /* Add padding around form */
+            width: calc(100% - 180px);
+            /* Full width minus sidebar */
+            box-sizing: border-box;
+            /* Include padding and border in width calculation */
+        }
+        .control-panel .search-container,
+        .control-panel .input-range-container,
+        .control-panel .parameter-selection {
+            margin-bottom: 15px;
+            /* Add vertical spacing between each line */
+        }
+        .error-message {
+            color: red;
+            margin-top: 10px;
+            display: none;
+        }
+        .exit-button {
+            background-color: #e7ad30;
+            color: white;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <button class="home-button" onclick="location.href='/post_exp'" aria-label="Go to Home page">Home</button>
+        <button class="upload-button" onclick="location.href='/post_exp/upload'" aria-label="Go to Upload Files page">Upload Files</button>
+        <button class="pass-button" onclick="location.href='/post_exp/pass'" aria-label="View Pass graphs">Pass</button>
+        <button class="fail-button" onclick="location.href='/post_exp/fail'" aria-label="View Fail graphs">Fail</button>
+        <button class="add-info-button" onclick="location.href='/post_exp/data-table'" aria-label="Go to Data Table page">Data Table</button>
+        <button class="graph-button" onclick="location.href='/post_exp/3d-graph'" aria-label="Go to Graph page">Graph</button>
+        <button class="exit-button" onclick="handleExit()">Exit</button>
+    </div>
+    <div class="form-container">
+        <h1>Data Table</h1>
+
+        <!-- Control Panel Box -->
+        <div class="control-panel">
+            <!-- Search feature -->
+            <div class="search-container">
+                <label>Search by File Name:</label>
+                <input type="text" id="search-input" placeholder="Enter file name" onkeyup="searchTable()">
+            </div>
+
+            <!-- Input fields for start and end index -->
+            <div class="input-range-container">
+                <label>File Index Range:</label>
+                <label for="start-index">Start Index</label>
+                <input type="number" id="start-index" min="0" value="0">
+                <label for="end-index">End Index</label>
+                <input type="number" id="end-index" min="0" value="0">
+            </div>
+
+            <!-- Dropdown to select parameter to update -->
+            <div class="parameter-selection">
+                <label for="parameter-dropdown">Update a Parameter:</label>
+                <select id="parameter-dropdown">
+                    <option value="frequency">Frequency</option>
+                    <option value="amplitude">Amplitude</option>
+                    <option value="concentration">Concentration</option>
+                </select>
+                <input type="text" id="parameter-value" placeholder="Enter new value">
+                <button class="apply-button" onclick="applyBatchChanges()">Apply Changes For the Selected Files</button>
+            </div>
+        </div>
+
+        <button class="select-all-button" onclick="selectAll()">Select All</button>
+        <button class="deselect-all-button" onclick="deselectAll()">Deselect All</button>
+        <button class="save-button" onclick="saveData()">Save Data</button>
+        <button class="export-button" onclick="exportToExcel()">Export to Excel</button>
+
+        <table id="data-table">
+            <thead>
+                <tr>
+                    <th>Select</th>
+                    <th>Index</th>
+                    <th>File Name</th>
+                    <th>Curve No.</th>
+                    <th>Date and Time</th>
+                    <th>Frequency</th>
+                    <th>Amplitude</th>
+                    <th>Peak Height</th>
+                    <th>Channel No.</th>
+                    <th>Concentration</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data rows will be inserted here by JavaScript -->
+            </tbody>
+        </table>
+
+        <div class="error-message" id="error-message"></div>
+
+        <!-- Embed the JSON data in a script tag -->
+        <script type="application/json" id="demo-data">{{ demo_data|tojson|safe }}</script>
+        <script>
+            // Pass the demo_data to JavaScript as a script variable
+            let demoData;
+            try {
+                demoData = JSON.parse(document.getElementById('demo-data').textContent);
+            } catch (e) {
+                console.error('Error parsing demo-data:', e);
+                showError('Failed to load table data. Please try again.');
+                demoData = {};
+            }
+            function handleExit() {
+                if (confirm("Are you sure you want to exit and download results?")) {
+                    // Trigger a download
+                    window.location.href = "/download-results";
+                }
+            }
+            function loadTable() {
+                const tbody = document.getElementById('data-table').getElementsByTagName('tbody')[0];
+                tbody.innerHTML = ''; // Clear existing table rows
+
+                let fileIndex = 0;
+                for (const file in demoData) {
+                    for (const curve in demoData[file]) {
+                        const row = document.createElement('tr');
+                        
+                        // Add select column
+                        const selectCell = document.createElement('td');
+                        const selectInput = document.createElement('input');
+                        selectInput.type = 'checkbox';
+                        selectInput.value = file + '_' + curve;
+                        selectInput.setAttribute('data-index', fileIndex);
+                        selectCell.appendChild(selectInput);
+                        row.appendChild(selectCell);
+
+                        // Add index column
+                        const indexCell = document.createElement('td');
+                        indexCell.innerText = fileIndex;
+                        row.appendChild(indexCell);
+
+                        // Add other columns
+                        row.innerHTML += `
+                            <td>${file}</td>
+                            <td>${curve}</td>
+                            <td>${demoData[file][curve]["Date and time measurement"] || ""}</td>
+                            <td class="editable" data-file="${file}" data-curve="${curve}" data-field="Frequence " contenteditable="true">${demoData[file][curve]["Frequence "] || ""}</td>
+                            <td class="editable" data-file="${file}" data-curve="${curve}" data-field="Amplitude " contenteditable="true">${demoData[file][curve]["Amplitude "] || ""}</td>
+                            <td>${demoData[file][curve]["Peak Value "] || ""}</td>
+                            <td>${demoData[file][curve]["Channel "] || ""}</td>
+                            <td>
+                                <input type="text"
+                                    class="concentration-input"
+                                    data-file="${file}"
+                                    data-curve="${curve}"
+                                    value="${demoData[file][curve]["Concentration"] || ""}"
+                                    placeholder="Enter concentration">
+                            </td>
+                        `;
+                        
+                        tbody.appendChild(row);
+                        fileIndex++;
+                    }
+                }
+
+                // Initialize the max value for end-index based on total files
+                document.getElementById('end-index').max = fileIndex - 1;
+            }
+
+            function showError(message, color = 'red') {
+                const errorMessage = document.getElementById("error-message");
+                errorMessage.textContent = message;
+                errorMessage.style.color = color;
+                errorMessage.style.display = "block";
+                setTimeout(() => {
+                    errorMessage.style.display = "none";
+                }, 3000);
+            }
+
+            function clearError() {
+                const errorMessage = document.getElementById("error-message");
+                errorMessage.textContent = "";
+                errorMessage.style.display = "none";
+            }
+
+            function selectAll() {
+                const checkboxes = document.querySelectorAll('input[type=checkbox]');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = true;
+                });
+            }
+            
+            function deselectAll() {
+                const checkboxes = document.querySelectorAll('input[type=checkbox]');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+            }
+            
+            function saveData() {
+                const updatedData = {};
+
+                // Loop through each row in the table
+                document.querySelectorAll('#data-table tbody tr').forEach(row => {
+                    const file = row.cells[2].innerText; // File Name
+                    const curve = row.cells[3].innerText; // Curve No.
+                    const frequency = row.cells[5].innerText.trim(); // Frequency
+                    const amplitude = row.cells[6].innerText.trim(); // Amplitude
+                    const concentration = row.querySelector('.concentration-input').value.trim();
+
+                    if (!updatedData[file]) {
+                        updatedData[file] = {};
+                    }
+                    
+                    // Save the updated values
+                    updatedData[file][curve] = {
+                        frequency: frequency,
+                        amplitude: amplitude,
+                        concentration: concentration
+                    };
+                });
+
+                // Send the updated data to the backend
+                fetch('/post_exp/data-table', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(updatedData)
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    clearError();
+                    showError('Data saved successfully!', 'green');
+                    // Reload the page to reflect updated data
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                })
+                .catch(error => {
+                    console.error('Error saving data:', error);
+                    showError('Failed to save data. Please try again.');
+                });
+            }
+
+            function searchTable() {
+                const searchValue = document.getElementById('search-input').value.toLowerCase();
+                const rows = document.getElementById('data-table').getElementsByTagName('tr');
+
+                for (let i = 1; i < rows.length; i++) { // Start at 1 to skip header row
+                    const cells = rows[i].getElementsByTagName('td');
+                    let match = false;
+                    for (let j = 0; j < cells.length; j++) {
+                        if (cells[j].innerText.toLowerCase().includes(searchValue)) {
+                            match = true;
+                            break;
+                        }
+                    }
+                    rows[i].style.display = match ? '' : 'none';
+                }
+            }
+
+            function applyBatchChanges() {
+                const startIndex = parseInt(document.getElementById('start-index').value, 10);
+                const endIndex = parseInt(document.getElementById('end-index').value, 10);
+                const parameterToChange = document.getElementById('parameter-dropdown').value;
+                const newValue = document.getElementById('parameter-value').value;
+
+                document.querySelectorAll('input[type=checkbox]').forEach(checkbox => {
+                    const fileIndex = parseInt(checkbox.getAttribute('data-index'), 10);
+
+                    if (fileIndex >= startIndex && fileIndex <= endIndex) {
+                        checkbox.checked = true; // Check the checkbox to indicate selection
+                        
+                        // Find the corresponding cell to update based on the selected parameter
+                        const row = checkbox.closest('tr');
+                        if (parameterToChange === 'frequency') {
+                            row.cells[5].innerText = newValue; // Update Frequency
+                            row.cells[5].style.color = 'blue'; // Change text color to blue
+                        } else if (parameterToChange === 'amplitude') {
+                            row.cells[6].innerText = newValue; // Update Amplitude
+                            row.cells[6].style.color = 'red'; // Change text color to blue
+                        } else if (parameterToChange === 'concentration') {
+                            const concentrationInput = row.querySelector('.concentration-input');
+                            concentrationInput.value = newValue; // Update Concentration
+                        }
+                    } else {
+                        checkbox.checked = false; // Uncheck checkboxes outside the range
+                    }
+                });
+            }
+
+            function exportToExcel() {
+                const table = document.getElementById('data-table');
+                const rows = Array.from(table.rows);
+
+                let csvContent = "data:text/csv;charset=utf-8,";
+                const headers = ["File Name","Curve No.","Date and Time","Frequency","Amplitude","Peak Height","Channel No.","Concentration"];
+                csvContent += headers.join(",") + "\r\n";
+
+                rows.slice(1).forEach(row => { // Skip header row
+                    const cols = Array.from(row.cells).slice(2); // Skip Select and Index columns
+                    const rowData = cols.map(cell => {
+                        if (cell.querySelector('input')) {
+                            return `"${cell.querySelector('input').value}"`; // Quote concentration input value
+                        }
+                        return `"${cell.innerText}"`; // Quote other cell text
+                    }).join(",");
+                    csvContent += rowData + "\r\n";
+                });
+
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", "data_table.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+            // Load table on page load
+            document.addEventListener('DOMContentLoaded', () => {
+                if (Object.keys(demoData).length === 0) {
+                    showError('No data available to display.');
+                } else {
+                    loadTable();
+                }
+            });
+        </script>
+    </div>
+</body>
+</html>

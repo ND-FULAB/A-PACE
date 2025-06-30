@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APACE</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh; /* Full viewport height */
+            margin: 0; /* Remove default margin */
+        }
+
+        .form-container {
+            text-align: center; /* Center text inside the container */
+        }
+        .form-container button {
+            margin: 10px 10px 0 0;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #3498db; /* Light blue */
+            color: white;
+            border: none;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="form-container">
+        <h1>Welcome to APACE!</h1>
+        <!-- New buttons for Real-Time Sensing and Post-Experiment Data Processing -->
+        <button onclick="location.href='/real_time'">Real-Time Sensing</button>
+        <button onclick="location.href='/post_exp'">Post-Experiment Data Processing</button>
+        </form>
+    </div>
+</body>
+<!-- <script>
+    window.onbeforeunload = function() {
+        // Trigger the cleanup process
+        navigator.sendBeacon('/clear_json');
+    };
+</script> -->
+</html>

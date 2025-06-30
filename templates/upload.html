@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: row;
+        }
+        .sidebar {
+            margin-right: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar button {
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+            width: 150px;
+        }
+        .home-button {
+            background-color: blue;
+            color: white;
+            cursor: pointer;
+        }
+        .upload-button {
+            background-color: #4CAF50; /* Green */
+            color: white;
+            cursor: pointer;
+        }
+        .pass-button {
+            background-color: #008CBA; /* Blue */
+            color: white;
+            cursor: pointer;
+        }
+        .fail-button {
+            background-color: #f44336; /* Red */
+            color: white;
+            cursor: pointer;
+        }
+        .add-info-button {
+            background-color: #e7e7e7; /* Gray */
+            color: black;
+            cursor: pointer;
+        }
+        .graph-button {
+            background-color: #555555; /* Black */
+            color: white;
+            cursor: pointer;
+        }
+        .form-container {
+            flex-grow: 1;
+        }
+        .uploaded-files {
+            margin-top: 20px;
+        }
+        .uploaded-files table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .uploaded-files table, .uploaded-files th, .uploaded-files td {
+            border: 1px solid black;
+        }
+        .uploaded-files th, .uploaded-files td {
+            padding: 8px;
+            text-align: left;
+        }
+        .delete-button {
+            background-color: whitesmoke;
+            color: red;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        .graphs-container {
+            margin-top: 20px;
+        }
+        .graph {
+            margin-bottom: 20px;
+        }
+        .delete-buttons {
+            display: flex;
+            align-items: center;
+            gap: 10px; /* Add space between the buttons */
+            margin-bottom: 10px; /* Add some margin below the buttons */
+            border-radius: 10px;
+        }
+        .delete-multiple-button, .delete-all-button {
+            width: 155px; /* Set a fixed width */
+            height: 30px; /* Set a fixed height */
+            background-color: #33af9e; /* Same background color */
+            color: white; /* Same text color */
+            border: none; /* Remove default borders */
+            padding: 5px; /* Add padding for better spacing */
+            text-align: center; /* Center text */
+            text-decoration: none; /* Remove text underline */
+            display: inline-block; /* Inline-block to apply width and height */
+            font-size: 14px; /* Set font size */
+            cursor: pointer; /* Pointer cursor on hover */
+            border-radius: 10px;
+        }
+
+        .delete-all-button {
+            background-color: rgb(99, 72, 197); /* Custom background color for this button */
+            cursor: pointer;
+        }
+        .upload-button {
+            background-color: rgb(76, 184, 68); /* Black */
+            color: white;
+            cursor: pointer;
+        }
+        .slidecontainer {
+            width: 100%; /* Full-width */
+            margin: 20px 0; /* Some margin */
+        }
+        .slider {
+            -webkit-appearance: none; /* Override default CSS styles */
+            appearance: none;
+            width: 100%; /* Full-width */
+            height: 15px; /* Specified height */
+            background: #d3d3d3; /* Grey background */
+            outline: none; /* Remove outline */
+            opacity: 0.7; /* Set transparency (for mouse-over effects on hover) */
+            -webkit-transition: .2s; /* 0.2 seconds transition on hover */
+            transition: opacity .2s;
+        }
+        .slider:hover {
+            opacity: 1; /* Fully shown on mouse-over */
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none; /* Override default look */
+            appearance: none;
+            width: 15px; /* Set a specific slider handle width */
+            height: 15px; /* Slider handle height */
+            background: #d01f51; /* Green background */
+            cursor: pointer; /* Cursor on hover */
+        }
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: -10px;
+        }
+        .slider-value {
+            text-align: center;
+            margin-top: 10px;
+        }
+        .algorithm-container {
+            background-color: #f0f0f0; /* Light grey background */
+            padding: 20px;
+            margin-left: 20px;
+            width: 210px; /* Fixed width */
+            height: 230px;
+            border: 2px solid #ccc; /* Border for better visual separation */
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Light shadow for depth */
+        }
+        .run-button {
+            width: 100%; /* Full width of the container */
+            height: 40px; /* Fixed height */
+            background-color: #d01f51; /* Green background */
+            color: white; /* White text */
+            border: none; /* Remove borders */
+            margin-top: 15px; /* Margin for spacing */
+            font-size: 18px; /* Font size */
+            cursor: pointer; /* Pointer cursor on hover */
+            border-radius: 10px;
+        }
+        .uploaded-files-button{
+            background-color: #015db6; 
+            color: white;
+            width: 320px;
+            height: 25px;
+            font-size: 16px;
+            border-radius: 20px;
+            border: none; /* Remove borders */
+            cursor: pointer;
+        }
+        .progress-container {
+            margin-top: 15px; /* Add margin to separate it from the Run button */
+            text-align: center; /* Center the progress bar */
+            width: 100%; /* Ensure the container takes full width available */
+        }
+
+        #progressBar {
+            width: 100%; /* Full width of the container */
+            height: 30px; /* Increased height for better visibility */
+        }
+        .exit-button {
+            background-color: #e7ad30;
+            color: white;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <button class="home-button" onclick="location.href='/post_exp'">Home</button>
+        <button class="upload-button" onclick="location.href='/post_exp/upload'">Upload Files</button>
+        <button class="pass-button" onclick="location.href='/post_exp/pass'">Pass</button>
+        <button class="fail-button" onclick="location.href='/post_exp/fail'">Fail</button>
+        <button class="add-info-button" onclick="location.href='/post_exp/data-table'">Data Table</button>
+        <button class="graph-button" onclick="location.href='/post_exp/3d-graph'">Graph</button>
+        <button class="exit-button" onclick="handleExit()">Exit</button>
+    </div>
+
+    <div class="form-container">
+        <h1>Upload Your Files</h1>
+        <button class="uploaded-files-button" class="button launch" onclick="launchFileGUI()">Click to Upload</button>
+        
+        {% if files.csv or files.pssession %}
+        <div class="uploaded-files">
+            <h2>Uploaded Files</h2>
+            <form action="/post_exp/delete-multiple" method="post">
+                <div class="delete-buttons">
+                    <input class="delete-multiple-button" type="submit" value="Delete Selected Files">
+                    <input class="delete-all-button" formaction="/post_exp/delete-all" type="submit" value="Delete ALL Files">
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Select</th>
+                            <th>File Name</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for file_type, file_list in files.items() %}
+                            {% for file_name in file_list %}
+                            <tr>
+                                <td><input type="checkbox" name="delete_files" value="{{ file_name }}"></td>
+                                <td>{{ file_name }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+    <div class="algorithm-container">
+        <h2>Enter The Parameters</h2>
+        <div>
+          <label for="successWeight">Success Weight:</label>
+          <input
+            type="number"
+            id="successWeight"
+            name="successWeight"
+            min="0"
+            max="1"
+            step="0.01"
+            value="0.5"
+          />
+        </div>
+        <div>
+          <label for="noiseLevel">Noise Level (1-3):</label>
+          <input
+            type="number"
+            id="noiseLevel"
+            name="noiseLevel"
+            min="1"
+            max="3"
+            step="1"
+            value="2"
+          />
+          <div>
+            <label for="Threshold">Threshold:</label>
+            <input
+              type="number"
+              id="Threshold"
+              name="Threshold"
+              min="0.2"
+              max="0.8"
+              step="0.01"
+              value="0.65"
+            />
+        </div>
+        <!-- <button class="uploaded-files-button" onclick="launchFileGUI()">Click to Upload</button> -->
+        <button class="run-button" onclick="launchDataAnalysis()">Run Data Analysis</button>
+        <!-- <div class="progress-container">
+            <progress id="progressBar" value="0" max="100"></progress>
+        </div> -->
+    </div>
+
+    
+    <script>
+        // var slider = document.getElementById("myRange");
+        // var output = document.getElementById("sliderValue");
+        // output.innerHTML = slider.value; // Display the default slider value
+
+        // Update the current slider value (each time you drag the slider handle)
+        slider.oninput = function() {
+            output.innerHTML = this.value;
+        }
+        function handleExit() {
+            if (confirm("Are you sure you want to exit and download results?")) {
+                // Trigger a download
+                window.location.href = "/download-results";
+            }
+        }
+        function launchFileGUI() {
+            fetch("{{ url_for('launch_file_gui') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+        }
+
+        function launchDataAnalysis() {
+            const successWeight = parseFloat(document.getElementById("successWeight").value);
+            const noiseLevel    = parseInt(document.getElementById("noiseLevel").value);
+            const Threshold     = parseFloat(
+                // if you switched to a slider, grab slider.value
+                document.getElementById("myRange")
+                ? document.getElementById("myRange").value
+                : document.getElementById("Threshold").value
+            );
+
+            const payload = { successWeight, noiseLevel, Threshold };
+
+            fetch("{{ url_for('analyze') }}", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            })
+            .then(r => {
+                if (!r.ok) throw new Error(r.statusText);
+                return r.json();
+            })
+            .then(data => {
+                console.log("Analysis result:", data);
+                // update progress...
+            })
+            .catch(console.error);
+            }
+
+    </script>
+</body>
+</html>
+

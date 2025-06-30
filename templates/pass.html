@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pass Graphs</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: row;
+        }
+        .sidebar {
+            margin-right: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar button {
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+            width: 150px;
+        }
+        .home-button { background-color: blue; color: white; cursor: pointer;}
+        .upload-button { background-color: #4CAF50; color: white; cursor: pointer;}
+        .pass-button { background-color: #008CBA; color: white; cursor: pointer;}
+        .fail-button { background-color: #f44336; color: white; cursor: pointer;}
+        .add-info-button { background-color: #e7e7e7; color: black; cursor: pointer;}
+        .graph-button { background-color: #555555; color: white; cursor: pointer;}
+        .form-container {
+            flex-grow: 1; /* Fill available space */
+            padding: 20px; /* Add padding around form */
+            width: calc(100% - 180px); /* Full width minus sidebar */
+            box-sizing: border-box; /* Include padding and border in width calculation */
+        }
+        .delete-button, .overlay-button {
+            background-color: #f44336; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 10px; 
+        }
+        .overlay-button { background-color: rgb(220, 107, 20); border-radius: 10px;}
+        .graphs-container {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px;
+        }
+        .graph { border: 1px solid #ccc; padding: 5px; }
+        .modal {
+            display: none; position: fixed; z-index: 1; padding-top: 100px; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgb(0,0,0); background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 10px;
+            border: 1px solid #888;
+            width: 65%; /* Change to 100% to take full width */
+            max-width: 1600px; /* Optionally set a max-width to avoid being too large */
+        }
+        .close {
+            color: #aaa; float: right; font-size: 28px; font-weight: bold;
+        }
+        .close:hover, .close:focus {
+            color: black; text-decoration: none; cursor: pointer;
+        }
+        /* New styles for pagination info */
+        .pagination-info {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            text-align: right;
+            z-index: 10;
+        }
+        .pagination-info p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .pagination-info button {
+            margin: 5px 0;
+            padding: 8px 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 14px;
+            width: 100px;
+        }
+        .pagination-info button:hover {
+            background-color: #0056b3;
+        }
+        .pagination-info .current-page {
+            display: block;
+            font-weight: bold;
+            margin: 5px 0;
+            text-align: center;  /* Center the text */
+        }
+        .loading-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .feedback-message {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: rgba(0, 123, 255, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            text-align: center;
+            font-size: 14px;
+            display: none; /* Initially hidden */
+        }
+        .control-panel {
+            background-color: #f9f9f9; /* Light gray background */
+            border: 2px solid #ddd; /* Light border */
+            padding: 20px; /* Space inside */
+            margin-bottom: 10px; /* Space outside */
+            width: 60%; /* Full width */
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+            box-sizing: border-box; /* Include padding and border in width calculation */
+        }
+
+        .control-panel label {
+            margin-right: 10px; /* Space between labels and inputs */
+        }
+
+        .control-panel input,
+        .control-panel select {
+            margin-right: 20px; /* Space between controls */
+        }
+
+        .control-panel input[type="text"] {
+            width: 200px; /* Text input width */
+        }
+
+        .control-panel input[type="number"] {
+            width: 60px; /* Number input width */
+        }
+
+        .control-panel .search-container,
+        .control-panel .input-range-container,
+        .control-panel .parameter-selection {
+            margin-bottom: 15px; /* Add vertical spacing between each line */
+        }
+        .text-color {
+            color:rgb(18, 54, 195);
+        }
+        .apply-button {
+            background-color: rgb(150, 85, 85); /* Dark Brown */
+            color: white;
+            cursor: pointer;
+        }
+        .clean-button {
+            background-color: rgb(79, 149, 174); /* Dark Brown */
+            color: white;
+            cursor: pointer;
+        }
+        .button-group {
+            margin-bottom: 10px; /* Space between button group and other elements */
+        }
+        .data-filters-text {
+            color:rgb(18, 54, 195);
+            margin-bottom: 10px; 
+        }
+        .exit-button {
+            background-color: #e7ad30;
+            color: white;
+            cursor: pointer;
+        }
+    </style>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div class="sidebar">
+        <button class="home-button" onclick="location.href='/post_exp'">Home</button>
+        <button class="upload-button" onclick="location.href='/post_exp/upload'">Upload Files</button>
+        <button class="pass-button" onclick="location.href='/post_exp/pass'">Pass</button>
+        <button class="fail-button" onclick="location.href='/post_exp/fail'">Fail</button>
+        <button class="add-info-button" onclick="location.href='/post_exp/data-table'">Data Table</button>
+        <button class="graph-button" onclick="location.href='/post_exp/3d-graph'">Graph</button>
+        <button class="exit-button" onclick="handleExit()">Exit</button>
+    </div>
+    
+    <div class="form-container">
+        <h1>Pass Graphs</h1>
+        <div class="button-group">
+            <button class="delete-button" onclick="deleteSelectedGraphs()">Delete >> Move to [Fail]</button>
+            <button class="overlay-button" onclick="overlaySelectedGraphs()">Overlay Selected Graphs</button>
+        </div>
+
+        {% if graphs and graphs|length > 0 %}
+        <!-- Filters inside the control panel -->
+        <div class="control-panel">
+            <!-- Peak Height Range -->
+            <div class="input-range-container">
+                <input type="checkbox" id="peak-height-checkbox" />
+                <label for="peak-height-checkbox">Peak Height Filter Range: </label>
+                <label>Min</label>
+                <input type="number" id="peak-height-min" step="0.1">
+                <label>Max</label>
+                <input type="number" id="peak-height-max" step="0.1">
+            </div>
+
+            <!-- Frequency Range -->
+            <div class="input-range-container">
+                <input type="checkbox" id="frequency-checkbox" />
+                <label for="frequency-checkbox">Frequency Filter Range: </label>
+                <label>Min</label>
+                <input type="number" id="frequency-min" min="0" step="0.1">
+                <label>Max</label>
+                <input type="number" id="frequency-max" min="0" step="0.1">
+            </div>
+
+            <!-- Concentration Range -->
+            <div class="input-range-container">
+                {% if concentration_missing %}
+                    <span style="color: rgb(220, 81, 81);">Concentration data is missing!</span>
+                {% else %}
+                    <input type="checkbox" id="concentration-checkbox" />
+                    <label for="concentration-checkbox">Set Concentration Range: </label>
+                    <label>Min: </label>
+                    <input type="number" id="concentration-min" step="0.1" disabled>
+                    <label>Max: </label>
+                    <input type="number" id="concentration-max" step="0.1" disabled>
+                    <p class = "text-color" id="concentration-display">Dataset Range: {{ min_concentration }} - {{ max_concentration }}</p>
+                {% endif %}
+            </div>
+
+            <button class="apply-button" onclick="applyFilters()">Apply Filters</button>
+            <button class="clean-button" onclick="clearFilters()">Clear Filters</button>
+        </div>
+        
+        <!-- Display the current range of figures -->
+        <label class = "data-filters-text"><b>Graphs Range: [{{ current_start }}-{{ current_end }}]</b></label>
+        <label class = "data-filters-text"><b>Graphs Total: {{ total_graphs }}</b></label>
+        <div class="graphs-container">
+            {% for graph in graphs %}
+                <div class="graph">
+                <input type="checkbox"
+                        class="graph-checkbox"
+                        value="{{ graph.file_name }}_{{ graph.curve_no }}">
+                {{ graph.html|safe }}
+                </div>
+            {% endfor %}
+        </div>
+
+        <!-- Pagination buttons -->
+        <div class="pagination-info">
+            {% if page > 1 %}
+                <a href="{{ url_for('pass_graphs', page=page-1) }}">
+                    <button>Previous</button>
+                </a>
+            {% endif %}
+            <span class="current-page">Page {{ page }} of {{ total_pages }}</span>
+            {% if page < total_pages %}
+                <a href="{{ url_for('pass_graphs', page=page+1) }}">
+                    <button>Next</button>
+                </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- The Modal -->
+    <div id="overlayModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="overlay-container"></div>
+        </div>
+    </div>
+    
+    <!-- Loading Indicator -->
+    <div id="loading-indicator" class="loading-indicator" style="display: none;">
+        <div class="spinner"></div>
+        <p>Loading, please wait...</p>
+    </div>
+
+    <!-- Feedback Message -->
+    <div id="feedback-message" class="feedback-message" style="display: none;"></div>
+    
+    <script>
+        function handleExit() {
+            if (confirm("Are you sure you want to exit and download results?")) {
+                // Trigger a download
+                window.location.href = "/download-results";
+            }
+        }
+        function applyFilters(page = 1) {  // Add a page parameter
+            const selectedFilters = {};
+
+            // Get checkbox elements
+            const peakHeightCheckbox = document.getElementById('peak-height-checkbox');
+            const frequencyCheckbox = document.getElementById('frequency-checkbox');
+            const concentrationCheckbox = document.getElementById('concentration-checkbox');
+
+            // Check if Peak Height is selected
+            if (peakHeightCheckbox && peakHeightCheckbox.checked) {
+                selectedFilters.peakHeight = {
+                    min: parseFloat(document.getElementById('peak-height-min').value),
+                    max: parseFloat(document.getElementById('peak-height-max').value)
+                };
+            }
+
+            // Check if Frequency is selected
+            if (frequencyCheckbox && frequencyCheckbox.checked) {
+                selectedFilters.frequency = {
+                    min: parseFloat(document.getElementById('frequency-min').value),
+                    max: parseFloat(document.getElementById('frequency-max').value)
+                };
+            }
+
+            // Check if Concentration is selected
+            if (concentrationCheckbox && concentrationCheckbox.checked) {
+                selectedFilters.concentration = {
+                    min: parseFloat(document.getElementById('concentration-min').value),
+                    max: parseFloat(document.getElementById('concentration-max').value)
+                };
+            }
+
+            // Add the current page to the request
+            selectedFilters.page = page;
+
+            // Show loading indicator
+            showLoadingIndicator(true);
+
+            // Perform the fetch request to filter graphs
+            fetch('/post_exp/pass', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(selectedFilters),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Hide loading indicator
+                showLoadingIndicator(false);
+
+                if (data.graphs == null || data.graphs.length === 0) {
+                    showFeedbackMessage('No graphs match the selected filters.', 'error');
+                } else {
+                    showFeedbackMessage('Graphs filtered successfully!', 'success');
+                    updateGraphs(data);
+
+                    // Update the graph range display
+                    updateGraphRangeDisplay(data.current_start, data.current_end, data.total_graphs);
+
+                    // Update pagination
+                    updatePagination(data.page, data.total_pages);
+                }
+            })
+            .catch(error => {
+                // Hide loading indicator and show error message
+                showLoadingIndicator(false);
+                showFeedbackMessage('An error occurred while fetching data.', 'error');
+                console.error("Fetch error:", error);
+            });
+        }
+
+        function updateGraphRangeDisplay(currentStart, currentEnd, totalGraphs) {
+            const rangeLabel = document.querySelector('.data-filters-text');
+            rangeLabel.innerHTML = `<b>Graphs Range: [${currentStart}-${currentEnd}]</b>`;
+            const totalLabel = document.querySelector('.data-filters-text + .data-filters-text');
+            totalLabel.innerHTML = `<b>Graphs Total: ${totalGraphs}</b>`;
+        }
+
+        function updatePagination(currentPage, totalPages) {
+            const paginationInfo = document.querySelector('.pagination-info');
+            paginationInfo.innerHTML = '';
+
+            // Previous button
+            if (currentPage > 1) {
+                const prevButton = document.createElement('a');
+                prevButton.href = `javascript:applyFilters(${currentPage - 1})`;
+                prevButton.innerHTML = '<button>Previous</button>';
+                paginationInfo.appendChild(prevButton);
+            }
+
+            // Current page
+            const pageSpan = document.createElement('span');
+            pageSpan.className = 'current-page';
+            pageSpan.innerText = `Page ${currentPage} of ${totalPages}`;
+            paginationInfo.appendChild(pageSpan);
+
+            // Next button
+            if (currentPage < totalPages) {
+                const nextButton = document.createElement('a');
+                nextButton.href = `javascript:applyFilters(${currentPage + 1})`;
+                nextButton.innerHTML = '<button>Next</button>';
+                paginationInfo.appendChild(nextButton);
+            }
+        }
+
+        function showLoadingIndicator(show) {
+            const loadingIndicator = document.getElementById('loading-indicator');
+            loadingIndicator.style.display = show ? 'block' : 'none';
+        }
+
+        function showFeedbackMessage(message, type) {
+            const feedbackMessage = document.getElementById('feedback-message');
+            feedbackMessage.innerText = message;
+            feedbackMessage.style.backgroundColor = type === 'success' ? 'rgba(40, 167, 69, 0.9)' : 'rgba(220, 53, 69, 0.9)';
+            feedbackMessage.style.display = 'block';
+
+            // Automatically hide after 3 seconds
+            setTimeout(() => {
+                feedbackMessage.style.display = 'none';
+            }, 3000);
+        }
+
+        function updateGraphs(data) {
+            const graphsContainer = document.querySelector('.graphs-container');
+            graphsContainer.innerHTML = ''; // Clear existing graphs
+
+            data.graphs.forEach((graph, index) => {
+                // Create a container div for each graph
+                const graphElement = document.createElement('div');
+                graphElement.className = 'graph';
+
+                // Set the inner HTML safely using DOMParser
+                const graphHTML = `
+                    <input type="checkbox" value="${graph.file_name}_${graph.curve_no}">
+                    ${graph.html}
+                `;
+
+                // Create a temporary element to parse the HTML string
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = graphHTML;
+
+                // Move the parsed HTML content to the graph element
+                while (tempDiv.firstChild) {
+                    graphElement.appendChild(tempDiv.firstChild);
+                }
+
+                // Append the graph element to the container
+                graphsContainer.appendChild(graphElement);
+
+                // Extract and execute any scripts within the graph HTML
+                const scripts = graphElement.querySelectorAll('script');
+                scripts.forEach(script => {
+                    const newScript = document.createElement('script');
+                    if (script.src) {
+                        newScript.src = script.src;
+                    } else {
+                        newScript.textContent = script.textContent;
+                    }
+                    document.body.appendChild(newScript);
+                    document.body.removeChild(newScript); // Clean up after execution
+                });
+            });
+        }
+
+        function updateRangeDisplay(parameter) {
+            const min = document.getElementById(`${parameter}-min`).value;
+            const max = document.getElementById(`${parameter}-max`).value;
+            document.getElementById(`${parameter}-display`).innerText = `Min: ${min}, Max: ${max}`;
+        }
+
+        function clearFilters() {
+            // Uncheck all checkboxes and clear input fields
+            document.getElementById('peak-height-checkbox').checked = false;
+            document.getElementById('frequency-checkbox').checked = false;
+            document.getElementById('concentration-checkbox').checked = false;
+
+            document.getElementById('peak-height-min').value = '';
+            document.getElementById('peak-height-max').value = '';
+            document.getElementById('frequency-min').value = '';
+            document.getElementById('frequency-max').value = '';
+            document.getElementById('concentration-min').value = '';
+            document.getElementById('concentration-max').value = '';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    const minInput = document.getElementById(`${checkbox.id.replace('-checkbox', '')}-min`);
+                    const maxInput = document.getElementById(`${checkbox.id.replace('-checkbox', '')}-max`);
+                    if (checkbox.checked) {
+                        minInput.disabled = false;
+                        maxInput.disabled = false;
+                    } else {
+                        minInput.disabled = true;
+                        maxInput.disabled = true;
+                    }
+                });
+            });
+        });
+
+        function deleteSelectedGraphs() {
+            const selectedGraphs = [];
+            document.querySelectorAll('input[type=checkbox]:checked').forEach(checkbox => {
+                selectedGraphs.push(checkbox.value);
+            });
+            console.log("Selected graphs to delete:", selectedGraphs);
+
+            fetch('/post_exp/delete_graphs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ graphs: selectedGraphs }),
+            }).then(response => {
+                if (response.ok) {
+                    location.reload();
+                }
+            }).catch(error => {
+                console.error("Fetch error:", error);
+            });
+        }
+
+        function overlaySelectedGraphs() {
+            const selectedGraphs = [];
+            document.querySelectorAll('input[type=checkbox]:checked').forEach(checkbox => {
+                selectedGraphs.push(checkbox.value);
+            });
+            console.log("Selected graphs to overlay:", selectedGraphs);
+
+            fetch('/post_exp/overlay_graphs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ graphs: selectedGraphs }),
+            }).then(response => {
+                if (!response.ok) {
+                    console.error("Fetch error:", response.statusText);
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            }).then(graph_json => {
+                console.log("Overlay graph JSON:", graph_json);
+                const overlayContainer = document.getElementById('overlay-container');
+                overlayContainer.innerHTML = ''; // Clear existing content
+                const div = document.createElement('div');
+                div.id = 'overlay-plot';
+                overlayContainer.appendChild(div);
+                const graphData = JSON.parse(graph_json);
+                Plotly.newPlot('overlay-plot', graphData.data, graphData.layout, {responsive: true});
+                showModal();
+            }).catch(error => {
+                console.error("Fetch error:", error);
+            });
+        }
+
+        function showModal() {
+            var modal = document.getElementById("overlayModal");
+            modal.style.display = "block";
+    
+            var span = document.getElementsByClassName("close")[0];
+            span.onclick = function() {
+                modal.style.display = "none";
+            }
+    
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+            }
+        }
+
+        // window.onbeforeunload = function() {
+        //     // Trigger the cleanup process
+        //     navigator.sendBeacon('/clear_json');
+        // };
+    </script>    
+</body>
+</html>

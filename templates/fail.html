@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fail Graphs</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: row;
+        }
+        .sidebar {
+            margin-right: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar button {
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+            width: 150px;
+        }
+        .home-button {
+            background-color: blue;
+            color: white;
+            cursor: pointer;
+        }
+        .upload-button {
+            background-color: #4CAF50; /* Green */
+            color: white;
+            cursor: pointer;
+        }
+        .pass-button {
+            background-color: #008CBA; /* Blue */
+            color: white;
+            cursor: pointer;
+        }
+        .fail-button {
+            background-color: #f44336; /* Red */
+            color: white;
+            cursor: pointer;
+        }
+        .add-info-button {
+            background-color: #e7e7e7; /* Gray */
+            color: black;
+            cursor: pointer;
+        }
+        .graph-button {
+            background-color: #555555; /* Black */
+            color: white;
+            cursor: pointer;
+        }
+        .form-container {
+            flex-grow: 1;
+        }
+        .restore-button {
+            background-color: #008CBA;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 10px; 
+        }
+        .update-button {
+            background-color: rgb(0, 128, 32);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 10px; 
+        }
+        .graphs-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .graph {
+            border: 1px solid #ccc;
+            padding: 5px;
+        }
+        .exit-button {
+            background-color: #e7ad30;
+            color: white;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <button class="home-button" onclick="location.href='/post_exp'">Home</button>
+        <button class="upload-button" onclick="location.href='/post_exp/upload'">Upload Files</button>
+        <button class="pass-button" onclick="location.href='/post_exp/pass'">Pass</button>
+        <button class="fail-button" onclick="location.href='/post_exp/fail'">Fail</button>
+        <button class="add-info-button" onclick="location.href='/post_exp/data-table'">Data Table</button>
+        <button class="graph-button" onclick="location.href='/post_exp/3d-graph'">Graph</button>
+        <button class="exit-button" onclick="handleExit()">Exit</button>
+    </div>
+    <div class="form-container">
+        <h1>Fail Graphs</h1>
+        <button class="restore-button" onclick="restoreSelectedGraphs()">Recycle >> Back to [Pass]</button>
+        <button class="update-button" onclick="updateSelectedGraphs()">Update Graphs Range</button>
+        <!-- <h3>Data Filters</h3>
+        <div class="filters">
+            <label><input type="checkbox" id="peak_height" checked> Peak height</label>
+            <label><input type="checkbox" id="frequency"> Frequency</label>
+            <label><input type="checkbox" id="concentration"> Concentration</label>
+        </div> -->
+        <div class="graphs-container">
+            {% for graph in graphs %}
+                <div class="graph">
+                    <input type="checkbox" value="{{ graph.file_name }}_{{ graph.curve_no }}">
+                    {{ graph.html|safe }}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+    <script>
+        function handleExit() {
+            if (confirm("Are you sure you want to exit and download results?")) {
+                // Trigger a download
+                window.location.href = "/download-results";
+            }
+        }
+        function restoreSelectedGraphs() {
+            const selectedGraphs = [];
+            document.querySelectorAll('input[type=checkbox]:checked').forEach(checkbox => {
+                selectedGraphs.push(checkbox.value);
+            });
+            fetch('/post_exp/restore_graphs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ graphs: selectedGraphs }),
+            }).then(response => {
+                if (response.ok) {
+                    location.reload();
+                }
+            });
+        }
+        
+        function updateSelectedGraphs() {
+            const selectedGraphs = [];
+            document.querySelectorAll('input[type=checkbox]:checked').forEach(checkbox => {
+                selectedGraphs.push(checkbox.value);
+            });
+            console.log("Selected graphs to update:", selectedGraphs);
+
+            showRangePop(selectedGraphs);
+        }
+        
+        function showRangePop(selectedGraphs) {
+            const popup = document.createElement('div');
+            popup.style.position = 'fixed';
+            popup.style.top = '5%';
+            popup.style.left = '50%';
+            popup.style.right = '20%';
+            // popup.style.transform = 'translate(-50%, -50%)';
+            popup.style.backgroundColor = 'rgb(187, 255, 111)';
+            popup.style.padding = '15px';
+            popup.style.borderRadius = '10px';
+            // popup.style.boxShadow = '10px 0px 30px rgba(0, 0, 0, 0.1)';
+
+            const title = document.createElement('p');
+            title.innerText = '< Enter the NEW Range Values >';
+            popup.appendChild(title);
+
+            const leftValInput = document.createElement('input');
+            leftValInput.setAttribute('type', 'text');
+            leftValInput.setAttribute('id', 'left_val');
+            leftValInput.setAttribute('placeholder', 'Left value(V)');
+            popup.appendChild(leftValInput);
+
+            const rightValInput = document.createElement('input');
+            rightValInput.setAttribute('type', 'text');
+            rightValInput.setAttribute('id', 'right_val');
+            rightValInput.setAttribute('placeholder', 'Right value(V)');
+            popup.appendChild(rightValInput);
+
+            const submitButton = document.createElement('button');
+            submitButton.innerText = 'Submit';
+            submitButton.onclick = function() {
+                const leftVal = document.getElementById('left_val').value;
+                const rightVal = document.getElementById('right_val').value;
+                submitRangeValues(leftVal, rightVal, selectedGraphs);
+                document.body.removeChild(popup); // Remove the pop-up after submission
+            };
+            popup.appendChild(submitButton);
+            
+            document.body.appendChild(popup); // Add the pop-up to the DOM to make it visible
+        }
+        
+        function submitRangeValues(leftVal, rightVal, selectedGraphs) {
+            fetch('/post_exp/update_graphs', {
+                method:'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ left_val: leftVal, right_val: rightVal, graphs: selectedGraphs }),
+            }).then(response => {
+                if (response.ok) {
+                    showSuccessMsg();
+                }
+                return response.json();
+            }).catch(error => {
+                console.error("Fetch error:", error);
+            });
+        }
+        
+        function showSuccessMsg() {
+            const successMsg = document.createElement('div');
+            successMsg.innerText = 'Range values submitted successfully!';
+            successMsg.style.position = 'fixed';
+            successMsg.style.left = '50%';
+            successMsg.style.right = '20%';
+            successMsg.style.top = '10%';
+            successMsg.style.height = '15px';
+            // successMsg.style.transform = 'translate(-50%, -50%)';
+            successMsg.style.backgroundColor = 'rgb(255, 251, 111)';
+            successMsg.style.padding = '20px';
+            successMsg.style.boxShadow = '0px 0px 10px rgba(0, 0, 0, 0.1)';
+
+            document.body.appendChild(successMsg);
+
+            setTimeout(() => {
+                document.body.removeChild(successMsg);
+            }, 3000); // Remove the message after 3 seconds
+        }
+
+        // window.onbeforeunload = function() {
+        //         // Trigger the cleanup process
+        //         navigator.sendBeacon('/clear_json');
+        //     };
+    </script>
+</body>
+</html>

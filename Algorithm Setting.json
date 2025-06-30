@@ -1,0 +1,911 @@
+{
+    "0": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('std_distribution', 'fastchrom')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": -10.64260920222274,
+        "Mean Square Error": -2.910991162684334
+    },
+    "1": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('std_distribution', 'fastchrom')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": -10.64260920222274,
+        "Mean Square Error": -2.910991162684334
+    },
+    "2": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('std_distribution', 'fastchrom')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": -10.64260920222274,
+        "Mean Square Error": -2.910991162684334
+    },
+    "3": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('std_distribution', 'fastchrom')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": -10.64260920222274,
+        "Mean Square Error": -2.910991162684334
+    },
+    "4": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('std_distribution', 'fastchrom')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": -10.64260920222274,
+        "Mean Square Error": -2.910991162684334
+    },
+    "5": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('std_distribution', 'fastchrom')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": -10.64260920222274,
+        "Mean Square Error": -2.910991162684334
+    },
+    "6": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('std_distribution', 'fastchrom')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": -10.64260920222274,
+        "Mean Square Error": -2.910991162684334
+    },
+    "7": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('std_distribution', 'fastchrom')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": -10.64260920222274,
+        "Mean Square Error": -2.910991162684334
+    },
+    "8": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('std_distribution', 'fastchrom')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": -10.64260920222274,
+        "Mean Square Error": -2.910991162684334
+    },
+    "9": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "10": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "11": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "12": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "13": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "14": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "15": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "16": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "17": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "18": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "19": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "20": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "21": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "22": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "23": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "24": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "25": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "26": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "27": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "28": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "29": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "30": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "31": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "32": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "33": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "34": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "35": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "36": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "37": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "38": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "39": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "40": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "41": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "42": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "43": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "44": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "45": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "46": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "47": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "48": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "49": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "50": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "51": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "52": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "53": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "54": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "55": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "56": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "57": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "58": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "59": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "60": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "61": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "62": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "63": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "64": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "65": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "66": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "67": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "68": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "69": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "70": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "71": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "72": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "73": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "74": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "75": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "76": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "77": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "78": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "79": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "80": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "81": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "82": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "83": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "84": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "85": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "86": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "87": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "88": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "89": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "90": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "91": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "92": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "93": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "94": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "95": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "96": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "97": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "98": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "99": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    },
+    "100": {
+        "Success Weight": 1.0,
+        "Baseline Fitting Algorithms": "('pspline_derpsalsa', 'imodpoly', 'goldindec', 'modpoly', 'dietrich', 'std_distribution')",
+        "Ratio For Peak": "0.65",
+        "CPD Search Model": "BottomUp",
+        "CPD Cost Function": "rank",
+        "Success Rate": 0.26414491306936627,
+        "Mean Square Error": -1.9467278050110257
+    }
+}

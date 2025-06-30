@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post-Experiment</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: row;
+        }
+        .sidebar {
+            margin-right: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar button {
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+            width: 150px;
+        }
+        .upload-button {
+            background-color: #4CAF50; /* Green */
+            color: white;
+            cursor: pointer;
+        }
+        .pass-button {
+            background-color: #008CBA; /* Blue */
+            color: white;
+            cursor: pointer;
+        }
+        .fail-button {
+            background-color: #f44336; /* Red */
+            color: white;
+            cursor: pointer;
+        }
+        .add-info-button {
+            background-color: #e7e7e7; /* Gray */
+            color: black;
+            cursor: pointer;
+        }
+        .graph-button {
+            background-color: #555555; /* Black */
+            color: white;
+            cursor: pointer;
+        }
+        .form-container {
+            flex-grow: 1;
+        }
+        .form-container button {
+            margin: 10px 10px 0 0;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #3498db; /* Light blue */
+            color: white;
+            border: none;
+            border-radius: 10px;
+        }
+        .home-button {
+            background-color: blueviolet;
+            color: white;
+            cursor: pointer;
+        }
+        .image-container {
+            display: flex;
+            justify-content: space-around; /* Distributes images evenly */
+            flex-wrap: wrap; /* Allows images to wrap to the next line if necessary */
+        }
+
+        .processing-image {
+            width: 1100px; /* Adjust the width of each image */
+            height: auto; /* Maintain aspect ratio */
+            margin: 10px; /* Space between images */
+        }
+        .exit-button {
+            background-color: #e7ad30;
+            color: white;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <button class="home-button" onclick="location.href='/'">Reselect Mode</button>
+        <button class="upload-button" onclick="location.href='/post_exp/upload'">Upload Files</button>
+        <button class="pass-button" onclick="location.href='/post_exp/pass'">Pass</button>
+        <button class="fail-button" onclick="location.href='/post_exp/fail'">Fail</button>
+        <button class="add-info-button" onclick="location.href='/post_exp/data-table'">Data Table</button>
+        <button class="graph-button" onclick="location.href='/post_exp/3d-graph'">Graph</button>
+        <button class="exit-button" onclick="handleExit()">Exit</button>
+    </div>
+    <div class="form-container">
+        <h1>Post-Experiment Data Processing</h1>
+        <!-- New buttons for Real-Time Sensing and Post-Experiment Data Processing -->
+        <h2>Here is how it works:</h2>
+        <!-- Insert four images here -->
+        <div class="image-container">
+            <img src="{{ url_for('static', filename='post-exp.png') }}" alt="Description of Image 1" class="processing-image">
+            <img src="{{ url_for('static', filename='graph.png') }}" alt="Description of Image 2" class="processing-image">
+            <img src="{{ url_for('static', filename='data-table.png') }}" alt="Description of Image 3" class="processing-image">
+            <img src="{{ url_for('static', filename='visualize.png') }}" alt="Description of Image 4" class="processing-image">
+        </div>
+    </div>
+</body>
+<script>
+function handleExit() {
+    if (confirm("Are you sure you want to exit and download results?")) {
+        // Trigger a download
+        window.location.href = "/download-results";
+    }
+}
+</script>
+</html>
