@@ -43,7 +43,7 @@ Install dependencies using Homebrew:
 
 ```shell
 # Install mono
-brew install mono
+brew install --cask mono-mdk
 
 # Install tkinter for Python 3.12
 brew install python-tk@3.12
@@ -58,6 +58,7 @@ python3.12 --version
 If Python 3.12 isn’t installed, install it:
 
 ```shell
+#install x86 version of Python via Rosetta2 with Apple Silicon
 brew install python@3.12
 ```
 
