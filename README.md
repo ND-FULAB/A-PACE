@@ -59,7 +59,14 @@ If Python 3.12 isn’t installed, install it:
 
 ```shell
 #install x86 version of Python via Rosetta2 with Apple Silicon
-brew install python@3.12
+arch -x86_64 bash Miniconda3-latest-MacOSX-x86_64.sh
+```
+
+```shell
+#create environment
+conda create -n A-PACE python=3.12 -y
+conda activate A-PACE
+pip install -r requirements.txt
 ```
 
 #### Linux
