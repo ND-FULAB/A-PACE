@@ -89,7 +89,7 @@
         <button class="fail-button" onclick="location.href='/post_exp/fail'">Fail</button>
         <button class="add-info-button" onclick="location.href='/post_exp/data-table'">Data Table</button>
         <button class="graph-button" onclick="location.href='/post_exp/3d-graph'">Graph</button>
-        <button class="exit-button" onclick="handleExit()">Exit</button>
+        <button class="exit-button" onclick="handleExit()">Download Results</button>
     </div>
     <div class="form-container">
         <h1>Post-Experiment Data Processing</h1>
@@ -106,10 +106,7 @@
 </body>
 <script>
 function handleExit() {
-    if (confirm("Are you sure you want to exit and download results?")) {
-        // Trigger a download
-        window.location.href = "/download-results";
-    }
+    window.location.href = "/download-results";
 }
 </script>
 </html>

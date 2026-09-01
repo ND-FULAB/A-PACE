@@ -4,6 +4,42 @@ from scipy.signal import savgol_filter
 import ruptures as rpt
 import matplotlib.pyplot as plt
 import copy
+
+
+def valid_savgol_window(sample_count, requested_window, polyorder=3):
+    if sample_count < 1:
+        raise ValueError("cannot smooth an empty signal")
+    max_window = sample_count if sample_count % 2 else sample_count - 1
+    min_window = polyorder + 1
+    if min_window % 2 == 0:
+        min_window += 1
+    if max_window < min_window:
+        raise ValueError(
+            f"signal requires at least {min_window} samples for polyorder {polyorder}"
+        )
+    window = max(int(requested_window), min_window)
+    if window % 2 == 0:
+        window += 1
+    return min(window, max_window)
+
+
+def smooth_signal(signal, smooth_level=2, polyorder=3):
+    values = np.asarray(signal, dtype=float)
+    if values.ndim != 1:
+        raise ValueError("signal must be one-dimensional")
+    if not np.all(np.isfinite(values)):
+        raise ValueError("signal contains non-finite values")
+    if isinstance(smooth_level, bool) or not isinstance(
+        smooth_level, (int, np.integer)
+    ) or smooth_level not in (1, 2, 3):
+        raise ValueError("smooth level must be an integer from 1 to 3")
+    smoothed = values
+    for factor in (50, 20, 3)[:smooth_level]:
+        window = valid_savgol_window(len(values), len(values) / factor, polyorder)
+        smoothed = savgol_filter(smoothed, window_length=window, polyorder=polyorder)
+    return smoothed
+
+
 def read_csv_data(filename, encoding='utf-16'):
     potential = []
     current = []
@@ -40,21 +76,27 @@ def get_algo_instance(model_search, model_cost, Alg_min_dis ,data):
 
 
 def CPD( Alg_X, Alg_y, SM, CF, Alg_Thre_Factor, Alg_smooth_level = 2 ):
+    Alg_X = np.asarray(Alg_X, dtype=float)
+    Alg_y = np.asarray(Alg_y, dtype=float)
+    if Alg_X.ndim != 1 or Alg_y.ndim != 1:
+        raise ValueError("potential and current must be one-dimensional")
+    if len(Alg_X) != len(Alg_y):
+        raise ValueError("potential and current must have the same length")
+    if len(Alg_X) < 5:
+        raise ValueError("at least 5 samples are required for change-point detection")
+    if not np.all(np.isfinite(Alg_X)) or not np.all(np.isfinite(Alg_y)):
+        raise ValueError("potential and current must contain only finite values")
+    if np.any(np.diff(Alg_X) == 0):
+        raise ValueError("potential values must not contain adjacent duplicates")
+    try:
+        Alg_Thre_Factor = float(Alg_Thre_Factor)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("peak-region threshold must be numeric") from exc
+    if not np.isfinite(Alg_Thre_Factor) or not 0 < Alg_Thre_Factor <= 1:
+        raise ValueError("peak-region threshold must be in (0, 1]")
 
     Alg_Thre_Factor_min = 0.2
-    window_factors = [50,20,3]
-    filter_window_1 = max( int(len(Alg_y)/50),4) #in case data length is short
-    if filter_window_1//2 ==0:
-        filter_window_1 += 1
-    smoothed = savgol_filter(Alg_y,  filter_window_1, 3)
-    
-    for i in range( Alg_smooth_level-1 ):
-
-        filter_window = int(len(Alg_y)/window_factors[i+1])
-        if filter_window//2 ==0:
-            filter_window += 1
-        smoothed_new = savgol_filter(smoothed,  filter_window,3)
-        smoothed = copy.copy(smoothed_new)
+    smoothed = smooth_signal(Alg_y, Alg_smooth_level, polyorder=3)
 
 
     thre_region_len = Alg_Thre_Factor * len(Alg_X)
@@ -71,12 +113,13 @@ def CPD( Alg_X, Alg_y, SM, CF, Alg_Thre_Factor, Alg_smooth_level = 2 ):
         # algo_smooth = rpt.Dynp(model=model_cost).fit(dy_smooth)
 
 
-        algo_smooth = get_algo_instance(SM, CF, int(Alg_Thre_Factor_min * len_baseline_fitting_smooth), dy_smooth)
+        min_size = max(1, int(Alg_Thre_Factor_min * len(Alg_X)))
+        algo_smooth = get_algo_instance(SM, CF, min_size, dy_smooth)
 
         result_smooth = algo_smooth.predict(n_bkps=num_bkps_smooth)
         len_baseline_fitting_smooth = max(result_smooth[:-1]) - min(result_smooth[:-1]) if result_smooth[:-1] else len(Alg_X)
         
-    if  len_baseline_fitting_smooth < Alg_Thre_Factor_min * len_baseline_fitting_smooth:
+    if len_baseline_fitting_smooth < Alg_Thre_Factor_min * len(Alg_X):
         CP_info_boundary_smooth = (0,0)
     else:
         CP_info_boundary_smooth = ( int(max(result_smooth[:-1])), int(min(result_smooth[:-1]))) if result_smooth[:-1] else (0, 0)  #index

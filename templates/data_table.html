@@ -78,7 +78,13 @@
         }
         table {
             width: 100%;
+            table-layout: fixed;
             border-collapse: collapse;
+        }
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
         th, td {
             border: 1px solid black;
@@ -88,6 +94,15 @@
         }
         th {
             background-color: #f2f2f2;
+        }
+        .file-name-cell {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+        .concentration-input {
+            box-sizing: border-box;
+            width: 100%;
+            min-width: 0;
         }
         .control-panel {
             background-color: #f9f9f9;
@@ -122,6 +137,7 @@
         }
         .form-container {
             flex-grow: 1;
+            min-width: 0;
             /* Fill available space */
             padding: 20px;
             /* Add padding around form */
@@ -156,7 +172,7 @@
         <button class="fail-button" onclick="location.href='/post_exp/fail'" aria-label="View Fail graphs">Fail</button>
         <button class="add-info-button" onclick="location.href='/post_exp/data-table'" aria-label="Go to Data Table page">Data Table</button>
         <button class="graph-button" onclick="location.href='/post_exp/3d-graph'" aria-label="Go to Graph page">Graph</button>
-        <button class="exit-button" onclick="handleExit()">Exit</button>
+        <button class="exit-button" onclick="handleExit()">Download Results</button>
     </div>
     <div class="form-container">
         <h1>Data Table</h1>
@@ -194,32 +210,51 @@
         <button class="select-all-button" onclick="selectAll()">Select All</button>
         <button class="deselect-all-button" onclick="deselectAll()">Deselect All</button>
         <button class="save-button" onclick="saveData()">Save Data</button>
-        <button class="export-button" onclick="exportToExcel()">Export to Excel</button>
+        <button class="export-button" onclick="exportToExcel()">Export CSV</button>
 
-        <table id="data-table">
-            <thead>
-                <tr>
-                    <th>Select</th>
-                    <th>Index</th>
-                    <th>File Name</th>
-                    <th>Curve No.</th>
-                    <th>Date and Time</th>
-                    <th>Frequency</th>
-                    <th>Amplitude</th>
-                    <th>Peak Height</th>
-                    <th>Channel No.</th>
-                    <th>Concentration</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Data rows will be inserted here by JavaScript -->
-            </tbody>
-        </table>
+        <div class="table-container">
+            <table id="data-table">
+                <colgroup>
+                    <col style="width: 4%">
+                    <col style="width: 4%">
+                    <col style="width: 18%">
+                    <col style="width: 7%">
+                    <col style="width: 11%">
+                    <col style="width: 6%">
+                    <col style="width: 6%">
+                    <col style="width: 8%">
+                    <col style="width: 11%">
+                    <col style="width: 10%">
+                    <col style="width: 6%">
+                    <col style="width: 9%">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Select</th>
+                        <th>Index</th>
+                        <th>File Name</th>
+                        <th>Curve No.</th>
+                        <th>Date and Time</th>
+                        <th>Frequency</th>
+                        <th>Amplitude</th>
+                        <th>Peak Height</th>
+                        <th>Peak Width at Half Maximum</th>
+                        <th>Peak Potential Location</th>
+                        <th>Channel No.</th>
+                        <th>Concentration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Data rows will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
 
         <div class="error-message" id="error-message"></div>
 
         <!-- Embed the JSON data in a script tag -->
         <script type="application/json" id="demo-data">{{ demo_data|tojson|safe }}</script>
+        <script type="application/json" id="file-display-names">{{ file_display_names|tojson|safe }}</script>
         <script>
             // Pass the demo_data to JavaScript as a script variable
             let demoData;
@@ -230,12 +265,33 @@
                 showError('Failed to load table data. Please try again.');
                 demoData = {};
             }
-            function handleExit() {
-                if (confirm("Are you sure you want to exit and download results?")) {
-                    // Trigger a download
-                    window.location.href = "/download-results";
-                }
+            let fileDisplayNames;
+            try {
+                fileDisplayNames = JSON.parse(document.getElementById('file-display-names').textContent);
+            } catch (e) {
+                console.error('Error parsing file-display-names:', e);
+                fileDisplayNames = {};
             }
+            function handleExit() {
+                window.location.href = "/download-results";
+            }
+
+            const COMPUTED_DECIMAL_PLACES = 6;
+
+            function formatComputedNumber(value) {
+                if (value === null || value === undefined || value === '') {
+                    return '';
+                }
+                const numericValue = Number(value);
+                if (!Number.isFinite(numericValue)) {
+                    return String(value);
+                }
+                const formatted = numericValue
+                    .toFixed(COMPUTED_DECIMAL_PLACES)
+                    .replace(/\.?0+$/, '');
+                return formatted === '-0' ? '0' : formatted;
+            }
+
             function loadTable() {
                 const tbody = document.getElementById('data-table').getElementsByTagName('tbody')[0];
                 tbody.innerHTML = ''; // Clear existing table rows
@@ -244,6 +300,7 @@
                 for (const file in demoData) {
                     for (const curve in demoData[file]) {
                         const row = document.createElement('tr');
+                        row.dataset.file = file;
                         
                         // Add select column
                         const selectCell = document.createElement('td');
@@ -259,24 +316,56 @@
                         indexCell.innerText = fileIndex;
                         row.appendChild(indexCell);
 
-                        // Add other columns
-                        row.innerHTML += `
-                            <td>${file}</td>
-                            <td>${curve}</td>
-                            <td>${demoData[file][curve]["Date and time measurement"] || ""}</td>
-                            <td class="editable" data-file="${file}" data-curve="${curve}" data-field="Frequence " contenteditable="true">${demoData[file][curve]["Frequence "] || ""}</td>
-                            <td class="editable" data-file="${file}" data-curve="${curve}" data-field="Amplitude " contenteditable="true">${demoData[file][curve]["Amplitude "] || ""}</td>
-                            <td>${demoData[file][curve]["Peak Value "] || ""}</td>
-                            <td>${demoData[file][curve]["Channel "] || ""}</td>
-                            <td>
-                                <input type="text"
-                                    class="concentration-input"
-                                    data-file="${file}"
-                                    data-curve="${curve}"
-                                    value="${demoData[file][curve]["Concentration"] || ""}"
-                                    placeholder="Enter concentration">
-                            </td>
-                        `;
+                        const values = demoData[file][curve];
+                        const appendTextCell = (value, className = '') => {
+                            const cell = document.createElement('td');
+                            cell.textContent = value ?? '';
+                            if (className) cell.className = className;
+                            row.appendChild(cell);
+                            return cell;
+                        };
+                        const appendComputedNumberCell = value => {
+                            const cell = appendTextCell(formatComputedNumber(value));
+                            const numericValue = Number(value);
+                            if (value !== null && value !== '' && Number.isFinite(numericValue)) {
+                                cell.title = `Full precision: ${value}`;
+                            }
+                            return cell;
+                        };
+                        const fileCell = appendTextCell(
+                            fileDisplayNames[file] || file,
+                            'file-name-cell'
+                        );
+                        fileCell.title = file;
+                        appendTextCell(curve);
+                        appendTextCell(values["Date and time measurement"]);
+
+                        const frequencyCell = appendTextCell(values["Frequence "], 'editable');
+                        frequencyCell.contentEditable = 'true';
+                        frequencyCell.dataset.file = file;
+                        frequencyCell.dataset.curve = curve;
+                        frequencyCell.dataset.field = 'Frequence ';
+
+                        const amplitudeCell = appendTextCell(values["Amplitude "], 'editable');
+                        amplitudeCell.contentEditable = 'true';
+                        amplitudeCell.dataset.file = file;
+                        amplitudeCell.dataset.curve = curve;
+                        amplitudeCell.dataset.field = 'Amplitude ';
+
+                        appendComputedNumberCell(values["Peak Value "]);
+                        appendComputedNumberCell(values["Peak Width at Half Maximum"]);
+                        appendComputedNumberCell(values["Peak Potential Location"]);
+                        appendTextCell(values["Channel "]);
+                        const concentrationCell = document.createElement('td');
+                        const concentrationInput = document.createElement('input');
+                        concentrationInput.type = 'text';
+                        concentrationInput.className = 'concentration-input';
+                        concentrationInput.dataset.file = file;
+                        concentrationInput.dataset.curve = curve;
+                        concentrationInput.value = values["Concentration"] ?? '';
+                        concentrationInput.placeholder = 'Enter concentration';
+                        concentrationCell.appendChild(concentrationInput);
+                        row.appendChild(concentrationCell);
                         
                         tbody.appendChild(row);
                         fileIndex++;
@@ -318,17 +407,17 @@
             }
             
             function saveData() {
-                const updatedData = {};
+                const updatedData = Object.create(null);
 
                 // Loop through each row in the table
                 document.querySelectorAll('#data-table tbody tr').forEach(row => {
-                    const file = row.cells[2].innerText; // File Name
+                    const file = row.dataset.file; // Full path, not the shortened display name
                     const curve = row.cells[3].innerText; // Curve No.
                     const frequency = row.cells[5].innerText.trim(); // Frequency
                     const amplitude = row.cells[6].innerText.trim(); // Amplitude
                     const concentration = row.querySelector('.concentration-input').value.trim();
 
-                    if (!updatedData[file]) {
+                    if (!Object.hasOwn(updatedData, file)) {
                         updatedData[file] = {};
                     }
                     
@@ -416,31 +505,7 @@
             }
 
             function exportToExcel() {
-                const table = document.getElementById('data-table');
-                const rows = Array.from(table.rows);
-
-                let csvContent = "data:text/csv;charset=utf-8,";
-                const headers = ["File Name","Curve No.","Date and Time","Frequency","Amplitude","Peak Height","Channel No.","Concentration"];
-                csvContent += headers.join(",") + "\r\n";
-
-                rows.slice(1).forEach(row => { // Skip header row
-                    const cols = Array.from(row.cells).slice(2); // Skip Select and Index columns
-                    const rowData = cols.map(cell => {
-                        if (cell.querySelector('input')) {
-                            return `"${cell.querySelector('input').value}"`; // Quote concentration input value
-                        }
-                        return `"${cell.innerText}"`; // Quote other cell text
-                    }).join(",");
-                    csvContent += rowData + "\r\n";
-                });
-
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", "data_table.csv");
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                window.location.href = '/post_exp/export-table';
             }
 
             // Load table on page load

@@ -1,145 +1,238 @@
 #!/usr/bin/env python3
-import os, json, threading, tkinter as tk
+import logging
+import os
+import threading
+import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from watchdog.observers import Observer
+
 from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+from storage import StorageError, read_json as storage_read_json
+from storage import update_json as storage_update_json
+from storage import write_json as storage_write_json
 
-# JSON file paths
-POSTEXP_JSON = 'database/uploaded_folder.json'
-REALTIME_JSON = 'database/real_time_folder_path.json'
 
-# Globals for watchdog
-observer: Observer | None = None
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+POSTEXP_JSON = os.path.join(BASE_DIR, "database", "uploaded_folder.json")
+REALTIME_JSON = os.path.join(BASE_DIR, "database", "real_time_folder_path.json")
+DEFAULT_FILES = {"csv": [], "pssession": []}
+
+observer = None
 observer_started = False
+app = None
+folder_path = None
+file_list = None
+_observer_lock = threading.RLock()
+LOGGER = logging.getLogger(__name__)
 
-# ─── Helpers ────────────────────────────────────────────────────────────────
 
 def read_json(path, defaults=None):
-    try:
-        with open(path, 'r') as f:
-            data = json.load(f)
-        return data
-    except Exception:
-        return defaults.copy() if defaults else {}
+    fallback = defaults or {}
+    data = storage_read_json(path, fallback)
+    return data if isinstance(data, dict) else fallback.copy()
+
 
 def write_json(path, data):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w') as f:
-        json.dump(data, f, indent=4)
+    storage_write_json(path, data)
+
+
+def _extension_key(ext):
+    return str(ext).lower().lstrip(".")
+
+
+def _matches_extension(path, ext):
+    return os.path.splitext(os.fspath(path))[1].lower() == "." + _extension_key(ext)
+
+
+def _listbox_insert_if_missing(listbox, path):
+    if path not in listbox.get(0, tk.END):
+        listbox.insert(tk.END, path)
+
+
+def _schedule_listbox_insert(listbox, path):
+    # Watchdog invokes handlers on its own thread; Tk widgets may only be
+    # touched by the main UI thread.
+    listbox.after(0, _listbox_insert_if_missing, listbox, path)
+
 
 class FileMonitorHandler(FileSystemEventHandler):
     def __init__(self, directory, ext, listbox, json_path):
-        self.ext = ext
+        self.directory = directory
+        self.ext = _extension_key(ext)
         self.listbox = listbox
         self.json_path = json_path
         super().__init__()
 
     def on_created(self, event):
-        if event.is_directory or not event.src_path.endswith(self.ext):
+        try:
+            self._record(event.src_path, event.is_directory)
+        except (OSError, StorageError):
+            LOGGER.exception("Could not record watched file %s", event.src_path)
+
+    def on_moved(self, event):
+        try:
+            self._record(event.dest_path, event.is_directory)
+        except (OSError, StorageError):
+            LOGGER.exception("Could not record watched file %s", event.dest_path)
+
+    def _record(self, path, is_directory=False):
+        if is_directory or not _matches_extension(path, self.ext):
             return
-        data = read_json(self.json_path, {'csv':[], 'pssession':[]})
-        files = data.setdefault(self.ext, [])
-        if event.src_path not in files:
-            files.append(event.src_path)
-            write_json(self.json_path, data)
-            self.listbox.insert(tk.END, event.src_path)
+        normalized = os.path.normpath(path)
+        added = False
+
+        def append_path(data):
+            nonlocal added
+            if not isinstance(data, dict):
+                data = {key: list(values) for key, values in DEFAULT_FILES.items()}
+            files = data.setdefault(self.ext, [])
+            if not isinstance(files, list):
+                files = data[self.ext] = []
+            if normalized not in files:
+                files.append(normalized)
+                added = True
+            return data
+
+        storage_update_json(self.json_path, append_path, DEFAULT_FILES)
+        if added:
+            _schedule_listbox_insert(self.listbox, normalized)
+
+
+def stop_monitoring():
+    global observer, observer_started
+    with _observer_lock:
+        current = observer
+        observer = None
+        observer_started = False
+    if current is not None:
+        current.stop()
+        current.join()
+
 
 def start_monitoring(dirpath, ext, listbox, json_path):
     global observer, observer_started
+    if not os.path.isdir(dirpath):
+        raise ValueError(f"Folder does not exist: {dirpath}")
+    stop_monitoring()
     handler = FileMonitorHandler(dirpath, ext, listbox, json_path)
-    observer = Observer()
-    observer.schedule(handler, dirpath, recursive=True)
-    t = threading.Thread(target=observer.start, daemon=True)
-    t.start()
-    observer_started = True
-    app.protocol("WM_DELETE_WINDOW", on_app_exit)
+    new_observer = Observer()
+    new_observer.schedule(handler, dirpath, recursive=True)
+    new_observer.start()
+    with _observer_lock:
+        observer = new_observer
+        observer_started = True
+    if app is not None:
+        app.protocol("WM_DELETE_WINDOW", on_app_exit)
+    return new_observer
+
 
 def on_app_exit():
-    global observer
-    if observer and observer_started:
-        observer.stop()
-        observer.join()
-    # clear only the POSTEXP storage on exit
-    write_json(POSTEXP_JSON, {'csv':[], 'pssession':[]})
-    app.quit()
+    stop_monitoring()
+    if app is not None:
+        app.destroy()
+
 
 def list_and_watch(dirpath, ext, listbox, json_path):
-    """Populate the listbox and JSON, then start folder monitoring."""
-    data = read_json(json_path, {'csv':[], 'pssession':[]})
-    files = data.setdefault(ext, [])
-    # initial scan
-    for root, _, fnames in os.walk(dirpath):
-        for f in fnames:
-            if f.endswith(ext):
-                full = os.path.join(root,f)
-                if full not in files:
-                    files.append(full)
-                    listbox.insert(tk.END, full)
-    write_json(json_path, data)
-    start_monitoring(dirpath, ext, listbox, json_path)
+    """Populate current-folder entries, persist them, and replace the watcher."""
+    if not os.path.isdir(dirpath):
+        raise ValueError(f"Folder does not exist: {dirpath}")
+    key = _extension_key(ext)
+    discovered = []
+    for root, _, names in os.walk(dirpath):
+        for name in names:
+            full = os.path.normpath(os.path.join(root, name))
+            if not _matches_extension(full, key):
+                continue
+            discovered.append(full)
+            _listbox_insert_if_missing(listbox, full)
 
-# ─── UI Callbacks ────────────────────────────────────────────────────────────
+    def add_discovered(data):
+        if not isinstance(data, dict):
+            data = {name: list(values) for name, values in DEFAULT_FILES.items()}
+        files = data.setdefault(key, [])
+        if not isinstance(files, list):
+            files = data[key] = []
+        for full in discovered:
+            if full not in files:
+                files.append(full)
+        return data
 
-# def select_folder_postexp():
-#     """Post‐experiment: write into uploaded_folder.json."""
-#     folder = filedialog.askdirectory()
-#     if not folder: return
-#     folder_path.set(folder)
-#     ext = file_type_var.get()
-#     list_and_watch(folder, ext, file_list, POSTEXP_JSON)
+    storage_update_json(json_path, add_discovered, DEFAULT_FILES)
+    return start_monitoring(dirpath, key, listbox, json_path)
+
 
 def select_folder_realtime():
-    """Real‐time sensing: write into real_time_folder_path.json."""
-    folder = filedialog.askdirectory()
-    if not folder: return
-    # immediately save the folder path so Flask can pick it up
-    write_json(REALTIME_JSON, {'folder_path': folder})
-    folder_path.set(folder)
-    ext = 'pssession'
-    list_and_watch(folder, ext, file_list, POSTEXP_JSON)
+    selected = filedialog.askdirectory()
+    if not selected:
+        return
+    stop_monitoring()
+    try:
+        write_json(REALTIME_JSON, {"folder_path": selected})
+        folder_path.set(selected)
+        file_list.delete(0, tk.END)
+        list_and_watch(selected, "pssession", file_list, POSTEXP_JSON)
+    except (OSError, StorageError, ValueError) as exc:
+        messagebox.showerror("Folder Error", str(exc))
 
-# ─── Remaining CRUD buttons ──────────────────────────────────────────────────
 
 def save_file_paths():
-    data = read_json(POSTEXP_JSON, {'pssession':[]})
-    for f in file_list.get(0, tk.END):
-        ext = os.path.splitext(f)[1].lstrip('.')
-        if ext in data and f not in data[ext]:
-            data[ext].append(f)
-    write_json(POSTEXP_JSON, data)
+    paths = tuple(file_list.get(0, tk.END))
+
+    def add_paths(data):
+        if not isinstance(data, dict):
+            data = {name: list(values) for name, values in DEFAULT_FILES.items()}
+        for path in paths:
+            extension = os.path.splitext(path)[1].lower().lstrip(".")
+            if extension not in DEFAULT_FILES:
+                continue
+            files = data.setdefault(extension, [])
+            if not isinstance(files, list):
+                files = data[extension] = []
+            if path not in files:
+                files.append(path)
+        return data
+
+    storage_update_json(POSTEXP_JSON, add_paths, DEFAULT_FILES)
+
 
 def delete_all_files():
-    write_json(POSTEXP_JSON, {'pssession':[]})
+    write_json(POSTEXP_JSON, {"csv": [], "pssession": []})
     file_list.delete(0, tk.END)
 
-# ─── Build UI ────────────────────────────────────────────────────────────────
 
-app = tk.Tk()
-app.title("Upload File Path")
-app.geometry("800x500")
-app.grid_rowconfigure(1, weight=1); app.grid_columnconfigure(0, weight=1)
+def build_app():
+    global app, folder_path, file_list
+    app = tk.Tk()
+    app.title("Upload File Path")
+    app.geometry("800x500")
+    app.grid_rowconfigure(1, weight=1)
+    app.grid_columnconfigure(0, weight=1)
 
-frame = ttk.Frame(app, padding=10)
-frame.grid(row=0, column=0, sticky="nsew")
+    frame = ttk.Frame(app, padding=10)
+    frame.grid(row=0, column=0, sticky="nsew")
+    ttk.Label(frame, text="Current Folder Path:").grid(row=0, column=0, sticky="w")
+    folder_path = tk.StringVar()
+    ttk.Label(frame, textvariable=folder_path, foreground="#4232a8").grid(
+        row=1, column=0, columnspan=3, sticky="we"
+    )
+    ttk.Button(frame, text="Select Your Real-time Folder", command=select_folder_realtime).grid(
+        row=3, column=1, pady=5
+    )
 
-tk.Label(frame, text="Current Folder Path:").grid(row=0, column=0, sticky="w")
-folder_path = tk.StringVar()
-ttk.Label(frame, textvariable=folder_path, foreground="#4232a8").grid(row=1, column=0, columnspan=3, sticky="we")
+    file_list = tk.Listbox(app, height=15, width=80, selectmode=tk.MULTIPLE)
+    file_list.grid(row=1, column=0, padx=20, pady=5, sticky="nsew")
+    action = ttk.Frame(app, padding=10)
+    action.grid(row=2, column=0, sticky="ew")
+    ttk.Button(action, text="Save Paths", command=save_file_paths).grid(row=0, column=0, padx=10)
+    ttk.Button(action, text="Delete All", command=delete_all_files).grid(row=0, column=1, padx=10)
+    ttk.Button(action, text="Exit", command=on_app_exit).grid(row=0, column=2, padx=10)
+    app.protocol("WM_DELETE_WINDOW", on_app_exit)
+    return app
 
-# ttk.Label(frame, text="File Type:").grid(row=2,column=0,sticky="w")
-# file_type_var = tk.StringVar(value='pssession')
-# ttk.Combobox(frame, textvariable=file_type_var, values=['pssession']).grid(row=2,column=1,sticky="w")
 
-# Two buttons, one for each mode
-# ttk.Button(frame, text="Post-exp Folder", command=select_folder_postexp).grid(row=3,column=0,pady=5)
-ttk.Button(frame, text="Select Your Real-time Folder", command=select_folder_realtime).grid(row=3,column=1,pady=5)
+def main():
+    build_app().mainloop()
 
-file_list = tk.Listbox(app, height=15, width=80, selectmode=tk.MULTIPLE)
-file_list.grid(row=1, column=0, padx=20, pady=5, sticky="nsew")
 
-action = ttk.Frame(app, padding=10); action.grid(row=2, column=0, sticky="ew")
-ttk.Button(action, text="Save Paths", command=save_file_paths).grid(row=0,column=0,padx=10)
-ttk.Button(action, text="Delete All", command=delete_all_files).grid(row=0,column=1,padx=10)
-ttk.Button(action, text="Exit", command=on_app_exit).grid(row=0,column=2,padx=10)
-
-app.mainloop()
+if __name__ == "__main__":
+    main()

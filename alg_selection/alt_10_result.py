@@ -32,8 +32,8 @@ def drop_Diff_cal( Alg_Data ):
     all_MSE = []
 
     all_SRs = []
-    for folder_index in range( len(list(Alg_Data.keys())) - 3 ):
-        folder = str(folder_index + 1)
+    folders = [key for key in Alg_Data if key not in keys2exclude]
+    for folder in folders:
         
         Raw_Peak = Alg_Data[folder][ "Raw Data Peak "]
         Net_Peak = Alg_Data[folder ]["Net Peak "]
@@ -49,6 +49,9 @@ def drop_Diff_cal( Alg_Data ):
         fake_x = []
 
         num_peaks = len(Net_Peak)
+        if num_peaks == 0:
+            all_SRs.append(0.0)
+            continue
         for i in range(num_peaks):
             if Net_Peak[i] > 0 and not math.isnan(Net_Peak[i] ):
                 fake_x.append(i)
@@ -64,14 +67,21 @@ def drop_Diff_cal( Alg_Data ):
                 it=3,              # 迭代次数
                 return_sorted=True # 返回排序后的 (x, y) 对
             )[:,1]
-            mse = mean_squared_error(Net_Peak_success, lowess_smoothed)/( max(Net_Peak_success)-min(Net_Peak_success)  )**2
+            signal_range = np.ptp(Net_Peak_success)
+            mse = (
+                mean_squared_error(Net_Peak_success, lowess_smoothed)
+                / signal_range ** 2
+                if signal_range > 0
+                else 0.0
+            )
             all_MSE.append(mse)
 
     if not all_MSE:
         all_MSE.append(1)
 
 
-    return sum(all_SRs)/len(all_SRs),  sum(all_MSE)/len(all_MSE)
+    success_rate = sum(all_SRs) / len(all_SRs) if all_SRs else 0.0
+    return success_rate, sum(all_MSE) / len(all_MSE)
 
 
     # if num_curve2cal_error > 0:

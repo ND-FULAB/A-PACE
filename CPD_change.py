@@ -1,248 +1,174 @@
-#rerun CPD after modifying CPs
-import pspython.pspyfiles as pspyfiles
-import Change_Point_Detection
-from multiprocessing import Pool,cpu_count,freeze_support
-import scipy.stats as stats
-from scipy.signal import savgol_filter
-from scipy.optimize import curve_fit
-from sklearn.ensemble import IsolationForest
-from sklearn.neighbors import LocalOutlierFactor
-from sklearn.preprocessing import StandardScaler
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from Algs import get_algo_instance
+"""Recalculate one curve after its change-point range is edited."""
+
 import numpy as np
-import re
-import datetime 
-import os
-from dateutil import parser
-import json
-import gc
-import pandas as pd
-import copy
-from tqdm import tqdm
-from scipy.signal import find_peaks, peak_widths
-from scipy.signal import savgol_filter
-import shutil
-import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from demo import baseline_fitting_standard,extreme_baseline_detection,get_CI,peak_info
-import ast
-def process_file(args):
-    Alg_File_Name,Alg_Curve_index,Curve_CP_value, Fit_Alg ,Alg_noise_level   = args 
-    with open('database/results.json', 'r', encoding='utf-8') as file:
-        data_result = json.load(file)
-    Alg_current = data_result[Alg_File_Name]["Curve No. "+str(1+Alg_Curve_index)]["Raw Current"]
-    Alg_potential = data_result[Alg_File_Name]["Curve No. "+str(1+Alg_Curve_index)]["Raw Poetntial "]
-    # print(Boundary)
-    # x, y = read_csv_data(File_Name)
-    Curve_CP_index = []
 
-    Baseline_Mean = [] 
-    Baseline_CI = []
-    Peak_Mean = []
-    Peak_Max = []
-    Peak_Min = []
-    Peak_Location = []
-    # for i in range( Num_Curves ):
-        # print(Alg_File_Name,i,len(Alg_potential),len(Alg_current))
-
-    window_factors = [50,20,3]
-    filter_window_1 = max( int(len(Alg_current)/50),2) #in case data length is short
-    if filter_window_1//2 ==0:
-        filter_window_1 += 1
-    smoothed = savgol_filter(Alg_current,  filter_window_1, 3)
-    for i in range( Alg_noise_level-1 ):
-
-        filter_window = int(len(Alg_current)/window_factors[i+1])
-        if filter_window//2 ==0:
-            filter_window += 1
-        smoothed_new = savgol_filter(smoothed,  filter_window,3)
-        smoothed = copy.copy(smoothed_new)
+import Change_Point_Detection
+from Algs import get_algo_instance
+from demo import (
+    PEAK_WIDTH_KEY,
+    baseline_fitting_standard,
+    extreme_baseline_detection,
+    get_CI,
+    peak_metrics,
+)
+from storage import RESULTS_PATH, read_json, write_json
 
 
-    Curve_CP_index.append(min(range(len(Alg_potential)), key=lambda i: abs(Alg_potential[i] - Curve_CP_value[1])))
-    Curve_CP_index.append(min(range(len(Alg_potential)), key=lambda i: abs(Alg_potential[i] - Curve_CP_value[0])))
+BASELINE_CI_KEY = "99\\% Confidence Interval of Baseline: "
+PEAK_CI_KEY = "99\\% Confidence Interval of Peak Value"
+LEGACY_BASELINE_CI_KEY = "95\\% Confidence Interval of Baseline: "
+LEGACY_PEAK_CI_KEY = "95\\% Confidence Interval of Peak Value"
 
-    # #dropout 
-    # if Curve_CP_index[0] == Curve_CP_index[1]:
-    #     print( Curve_CP_value, Curve_CP_index )
-    #     Baseline_Mean.append([])
-    #     Baseline_CI.append([])
-    #     Peak_Mean.append(0) 
-    #     Peak_Max.append(0) 
-    #     Peak_Min.append(0) 
-    #     Peak_Location.append(0)
 
-    #     plt.figure(num = i+ 100)
-    #     plt.rcParams['font.family'] = 'Arial'
-    #     plt.rcParams['font.size'] = 14
-    #     plt.figure(figsize=(16, 9))
-    #     plt.plot(Alg_potential,Alg_current, label='Raw_data', color='red')
-    #     plt.plot(Alg_potential,smoothed, label='CPD smooth', color='black')
-    #     plt.axvline(x=Curve_CP_value[1], color='black', label='Boundary-peak' )
-    #     plt.axvline(x=Curve_CP_value[0],color='black')
-    #     plt.xlabel('Potential', fontsize=14, fontname='Arial')
-    #     plt.ylabel('Current', fontsize=14, fontname='Arial')
-    #     plt.legend()
-    #     plt.title('Data Analysis Results(Change point overlap)')
-    #     plt.savefig('Fig_Saved/'+Alg_File_Name + '_'+str(Alg_Curve_index) + 'alg.png')
-    #     plt.close('all')
-    #     continue
+def _write_json_atomic(path, data):
+    write_json(path, data)
 
-    Fit_Order = 5
-    Num_Iter = 9999
-    mask = np.ones(shape = len(Alg_potential))
-    mask[ int(Curve_CP_index[1]): int(Curve_CP_index[0])] = 0#be consist with boundary calculation 
-    weight = mask.astype(bool) 
 
-    #Fit_Alg = ['imodpoly4', 'penalized_poly4', 'pspline_derpsalsa', 'pspline_iarpls', 'pspline_iasls', 'pspline_mpls', 'fabc']
+def _failure_result(cp_indexes, cp_values):
+    return {
+        "Change Point Indexes ": list(cp_indexes),
+        "Change Point Values ": list(cp_values),
+        "Baseline Mean ": [],
+        BASELINE_CI_KEY: [],
+        "Peak Value ": 0,
+        PEAK_CI_KEY: [0, 0],
+        "Peak Location: ": 0,
+        PEAK_WIDTH_KEY: None,
+        "review_status": "fail",
+    }
 
-    Alg_baselines = []
-    Fit_Alg_using = copy.copy(Fit_Alg)  #this list is to store the using algs
-    # plt.figure(num =   i+ 10000)
-    # plt.rcParams['font.family'] = 'Arial'
-    # plt.rcParams['font.size'] = 14
-    # plt.figure(figsize=(16, 9))
-    # plt.plot(Alg_potential,Alg_current, label='Raw_data', color='red')
-    # plt.plot(Alg_potential,smoothed, label='CPD smooth', color='black')
-    # plt.axvline(x=Curve_CP_value[1], color='black', label='Boundary-peak' )
-    # plt.axvline(x=Curve_CP_value[0],color='black')
-    index_baseline_fitting_standard = [] #index for baseline not satisfiled baseline_fitting_standard()        
-    for fitting_alg in Fit_Alg:
-        (baseline, para), error = get_algo_instance(fitting_alg,Alg_potential,smoothed,Fit_Order,Num_Iter,weight)
+
+def _finalize_curve(curve_data, updates, data_result, persist_to_disk):
+    curve_data.update(updates)
+    curve_data.pop(LEGACY_BASELINE_CI_KEY, None)
+    curve_data.pop(LEGACY_PEAK_CI_KEY, None)
+    if persist_to_disk:
+        _write_json_atomic(RESULTS_PATH, data_result)
+    return curve_data
+
+
+def process_file(args, data_result=None, persist=True):
+    """Recalculate a curve and return its updated result mapping.
+
+    The legacy one-argument call still loads and persists ``database/results.json``.
+    Passing ``data_result`` injects an in-memory results mapping and never writes it;
+    callers can therefore recalculate several curves and commit once. ``persist=False``
+    also suppresses the write when results are loaded from disk.
+    """
+    try:
+        file_name, curve_index, cp_values, fitting_algorithms, noise_level = args
+    except (TypeError, ValueError) as exc:
+        raise ValueError("analysis arguments must contain five values") from exc
+
+    if isinstance(curve_index, bool) or not isinstance(curve_index, (int, np.integer)):
+        raise ValueError("curve index must be an integer")
+    if isinstance(noise_level, bool) or not isinstance(noise_level, (int, np.integer)):
+        raise ValueError("noise level must be an integer from 1 to 3")
+    if noise_level not in (1, 2, 3):
+        raise ValueError("noise level must be from 1 to 3")
+
+    persist_to_disk = bool(persist) and data_result is None
+    if data_result is None:
+        data_result = read_json(RESULTS_PATH, {})
+
+    curve_key = "Curve No. " + str(int(curve_index) + 1)
+    try:
+        curve_data = data_result[file_name][curve_key]
+    except (KeyError, TypeError) as exc:
+        raise KeyError(f"Curve not found: {file_name!r} / {curve_key}") from exc
+
+    try:
+        cp_values = np.asarray(cp_values, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("change-point values must be numeric") from exc
+    if cp_values.shape != (2,) or not np.all(np.isfinite(cp_values)):
+        raise ValueError("exactly two finite change-point values are required")
+
+    try:
+        potential = np.asarray(curve_data["Raw Poetntial "], dtype=float)
+        current = np.asarray(curve_data["Raw Current"], dtype=float)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("curve does not contain numeric raw potential/current data") from exc
+    if (
+        potential.ndim != 1
+        or current.ndim != 1
+        or len(potential) != len(current)
+        or len(potential) < 5
+        or not np.all(np.isfinite(potential))
+        or not np.all(np.isfinite(current))
+    ):
+        raise ValueError("curve must contain at least five finite x/y samples of equal length")
+
+    selected_indexes = [int(np.argmin(np.abs(potential - value))) for value in cp_values]
+    upper_index = max(selected_indexes)
+    lower_index = min(selected_indexes)
+    curve_cp_indexes = (upper_index, lower_index)
+    curve_cp_values = (float(potential[lower_index]), float(potential[upper_index]))
+    failure = _failure_result(curve_cp_indexes, curve_cp_values)
+
+    if upper_index - lower_index < 3:
+        return _finalize_curve(curve_data, failure, data_result, persist_to_disk)
+
+    try:
+        smoothed = Change_Point_Detection.smooth_signal(current, noise_level, polyorder=3)
+    except (TypeError, ValueError) as error:
+        print(f"{file_name} {curve_key} smoothing failed: {error}")
+        return _finalize_curve(curve_data, failure, data_result, persist_to_disk)
+
+    mask = np.ones(len(potential), dtype=bool)
+    mask[lower_index:upper_index] = False
+    baselines = []
+    for fitting_algorithm in fitting_algorithms:
+        try:
+            (baseline, _), error = get_algo_instance(
+                fitting_algorithm, potential, smoothed, 5, 9999, mask
+            )
+            baseline = np.asarray(baseline, dtype=float)
+        except Exception as error:
+            print(f"{file_name} {curve_key} {fitting_algorithm} failed: {error}")
+            continue
         if error:
-            print(Alg_File_Name,Fit_Alg,error)
+            print(f"{file_name} {curve_key} {fitting_algorithm} failed: {error}")
+            continue
+        if (
+            baseline.shape != smoothed.shape
+            or not np.all(np.isfinite(baseline))
+            or not baseline_fitting_standard(curve_cp_indexes, smoothed, baseline)
+        ):
+            continue
+        baselines.append(baseline)
 
-        elif baseline_fitting_standard(  Curve_CP_index, smoothed,baseline  ):
-            # print(fitting_alg,'works')
-            Alg_baselines.append(baseline)
-            # plt.plot(Alg_potential,baseline, label=fitting_alg)
+    if not baselines:
+        return _finalize_curve(curve_data, failure, data_result, persist_to_disk)
+
+    try:
+        if len(baselines) < 5:
+            baseline_mean, baseline_half_width = get_CI(baselines)
         else:
-            Fit_Alg_using.remove( fitting_alg  )
-            #plt.plot(Alg_potential,baseline, '--', label=fitting_alg)
-            
-    if len(Alg_baselines) == 0:
-        Baseline_Mean.append([])
-        Baseline_CI.append([])
-        Peak_Mean.append(0) 
-        Peak_Max.append(0) 
-        Peak_Min.append(0) 
-        Peak_Location.append(0)
-        # plt.xlabel('Potential', fontsize=14, fontname='Arial')
-        # plt.ylabel('Current', fontsize=14, fontname='Arial')
-        # plt.legend()
-        # plt.title('Data Analysis Results(Fitting Failed)')
-        # plt.savefig('Fig_Saved/'+ Alg_File_Name + '_'+str(Alg_Curve_index) + 'alg.png')
-        # plt.close('all')
-        print('Can not fitting baseline')
-    else:
-        if len(Alg_baselines) <5:  #no extreme value detection
-            Curve_Baseline_Mean, Curve_Baseline_CI =get_CI(Alg_baselines)
-            Baseline_Mean.append(Curve_Baseline_Mean)
-            Baseline_CI.append( Curve_Baseline_CI )
-        else:
-            Curve_Baseline_Mean, Curve_Baseline_CI,Curve_Outlier_Info =  extreme_baseline_detection(Alg_baselines)
-            Baseline_Mean.append(Curve_Baseline_Mean)
-            Baseline_CI.append( Curve_Baseline_CI )
-        # for j in range(len(Fit_Alg_using) ):
-        #     if Curve_Outlier_Info[j]:
-        #         plt.plot(Alg_potential,Alg_baselines[j], label=Fit_Alg_using[j])
-        #     else:
-        #         plt.plot(Alg_potential,Alg_baselines[j], '-.' , label=Fit_Alg_using[j])
+            baseline_mean, baseline_half_width, _ = extreme_baseline_detection(baselines)
 
+        baseline_mean = np.asarray(baseline_mean, dtype=float)
+        baseline_half_width = np.asarray(baseline_half_width, dtype=float)
+        peak_values = (smoothed - baseline_mean)[lower_index:upper_index]
+        peak_mean, peak_location, relative_peak_index, peak_width = peak_metrics(
+            potential[lower_index:upper_index], peak_values
+        )
+        absolute_peak_index = lower_index + int(relative_peak_index)
+        half_width = float(baseline_half_width[absolute_peak_index])
+        peak_mean = float(peak_mean)
+        updates = {
+            "Change Point Indexes ": list(curve_cp_indexes),
+            "Change Point Values ": list(curve_cp_values),
+            "Baseline Mean ": baseline_mean.tolist(),
+            BASELINE_CI_KEY: baseline_half_width.tolist(),
+            "Peak Value ": peak_mean,
+            PEAK_CI_KEY: [peak_mean - half_width, peak_mean + half_width],
+            "Peak Location: ": float(peak_location),
+            PEAK_WIDTH_KEY: peak_width,
+            "review_status": "pass",
+        }
+    except Exception as error:
+        print(f"{file_name} {curve_key} result calculation failed: {error}")
+        updates = failure
 
-        if Curve_Baseline_Mean:
-
-            Curve_Peak_Mean,Curve_Peak_Location,Curve_Peak_Index = peak_info( Alg_potential[ int(Curve_CP_index[1]):int(Curve_CP_index[0]) ],[a - b for a, b in zip(smoothed, Curve_Baseline_Mean)][ int(Curve_CP_index[1]):int(Curve_CP_index[0])]  )
-            Peak_Mean.append(Curve_Peak_Mean)
-            Peak_Location.append(Curve_Peak_Location)
-            
-            Peak_Min.append(Curve_Peak_Mean - Curve_Baseline_CI[ Curve_Peak_Index + int(Curve_CP_index[1])  ] )
-            Peak_Max.append(Curve_Peak_Mean +  Curve_Baseline_CI[ Curve_Peak_Index + int(Curve_CP_index[1])  ])
-            # plt.plot(Alg_potential,Curve_Baseline_Mean, label='baseline', color='yellow')
-            # plt.fill_between(
-            #     Alg_potential,
-            #     [a - b for a, b in zip(Curve_Baseline_Mean, Curve_Baseline_CI)],
-            #     [a + b for a, b in zip(Curve_Baseline_Mean, Curve_Baseline_CI)],
-            #     color='blue', alpha=0.2, label='95% Confidence Interval of Baseline'
-            # )
-            # plt.xlabel('Potential', fontsize=14, fontname='Arial')
-            # plt.ylabel('Current', fontsize=14, fontname='Arial')
-            # plt.legend()
-            # plt.title('Data Analysis Results')
-            # plt.savefig('Fig_Saved/'+ Alg_File_Name  + '_'+str(Alg_Curve_index) + 'alg.png')
-            # plt.close('all')
-
-
-
-            # plt.figure(num = i+ 1)
-            # plt.rcParams['font.family'] = 'Arial'
-            # plt.rcParams['font.size'] = 14
-            # plt.figure(figsize=(16, 9))
-            # plt.plot(Alg_potential,Alg_current, label='Raw_data', color='red')
-            # plt.plot(Alg_potential, Curve_Baseline_Mean, label='Baseline', color='blue')
-            # plt.axvline(x=Curve_CP_value[1], color='red', label='Boundary-peak' )
-            # plt.axvline(x=Curve_CP_value[0],color='red')
-            # plt.fill_between(
-            #     Alg_potential,
-            #     [a - b for a, b in zip(Curve_Baseline_Mean, Curve_Baseline_CI)],
-            #     [a + b for a, b in zip(Curve_Baseline_Mean, Curve_Baseline_CI)],
-            #     color='blue', alpha=0.2, label='95% Confidence Interval of Baseline'
-            # )
-            # plt.plot(Alg_potential[ int(Curve_CP_index[1]):int(Curve_CP_index[0]) ],[a-b for a,b in zip(Alg_current,Curve_Baseline_Mean ) ][ int(Curve_CP_index[1]):int(Curve_CP_index[0]) ], label='Peak', color='green')
-            # # plt.fill_between(
-            # #     Alg_potential[ int(Curve_CP_index[1]):int(Curve_CP_index[0]) ],
-            # #     [a-b for a,b in zip(Alg_current,Curve_Baseline_CI[0] ) ][ int(Curve_CP_index[1]):int(Curve_CP_index[0]) ],
-            # #     [a-b for a,b in zip(Alg_current,Curve_Baseline_CI[1] ) ][ int(Curve_CP_index[1]):int(Curve_CP_index[0]) ],
-            # #     color='green', alpha=0.2, label='95% Confidence Interval of Peak'
-            # # )
-            # plt.scatter( Curve_Peak_Location,Curve_Peak_Mean,label= 'Peak Height' )
-            # plt.xlabel('Potential', fontsize=14, fontname='Arial')
-            # plt.ylabel('Current', fontsize=14, fontname='Arial')
-            # plt.legend()
-            # plt.title('Data Analysis Results')
-            # plt.savefig('Fig_Saved/'+ Alg_File_Name + '_'+str(Alg_Curve_index) + '.png')
-
-            # plt.figure(num =  Alg_File_Index + i+ 100) # back to draw alg figures
-
-
-        else:
-            print(Alg_File_Name, i,'Failed')
-            Peak_Mean.append(0) 
-            Peak_Max.append(0) 
-            Peak_Min.append(0) 
-            Peak_Location.append(0)
-            # plt.xlabel('Potential', fontsize=14, fontname='Arial')
-            # plt.ylabel('Current', fontsize=14, fontname='Arial')# back to draw alg figures
-            # plt.legend()
-            # plt.title('Data Analysis Results')
-            # plt.savefig('Fig_Saved/'+ Alg_File_Name + '_'+str(Alg_Curve_index) + 'alg.png')
-            # plt.close('all')
-        data_result[Alg_File_Name]["Curve No. "+str(1+Alg_Curve_index)]["Change Point Indexes "] = Curve_CP_index
-        data_result[Alg_File_Name]["Curve No. "+str(1+Alg_Curve_index)]["Change Point Values "] = Curve_CP_value
-        data_result[Alg_File_Name]["Curve No. "+str(1+Alg_Curve_index)]["Baseline Mean "] =  Curve_Baseline_Mean
-        data_result[Alg_File_Name]["Curve No. "+str(1+Alg_Curve_index)]["95\\% Confidence Interval of Baseline: "] = Curve_Baseline_CI 
-        data_result[Alg_File_Name]["Curve No. "+str(1+Alg_Curve_index)]["Peak Value "] = Curve_Peak_Mean
-        data_result[Alg_File_Name]["Curve No. "+str(1+Alg_Curve_index)]["95\\% Confidence Interval of Peak Value"] =[Curve_Peak_Mean - Curve_Baseline_CI[ Curve_Peak_Index + int(Curve_CP_index[1])  ] , Curve_Peak_Mean +  Curve_Baseline_CI[ Curve_Peak_Index + int(Curve_CP_index[1])  ]]
-        data_result[Alg_File_Name]["Curve No. "+str(1+Alg_Curve_index)]["Peak Location: "] = Curve_Peak_Location
-        save_filename = 'database/results.json'
-        # save result as JSON file
-        with open(save_filename, 'w') as json_file:
-            json.dump(data_result, json_file,indent=4,  ensure_ascii=False)
-
-    
-SR_weight = 0.5
-
-# Delete figures update
-# with open('Algorithm Setting.json', 'r', encoding='utf-8') as file:
-#     data_algs = json.load(file)
-# name = str(int(SR_weight/0.01))
-# A = ("100hz.pssession",0,[-0.5,-0.1], 
-#     list(ast.literal_eval(data_algs[name][ "Baseline Fitting Algorithms"]) ),
-#     3) 
-# process_file(A)
-    
-
+    return _finalize_curve(curve_data, updates, data_result, persist_to_disk)

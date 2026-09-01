@@ -29,8 +29,24 @@ import sys
 def baseline_fitting_standard(  Alg_Boundarys, Alg_Raw_Current,Alg_Baseline_Current, Alg_File_Name_error ):
     
 
-    Alg_Raw_Current = np.array(Alg_Raw_Current)
-    Alg_Baseline_Current = np.array(Alg_Baseline_Current)
+    Alg_Raw_Current = np.asarray(Alg_Raw_Current, dtype=float)
+    Alg_Baseline_Current = np.asarray(Alg_Baseline_Current, dtype=float)
+    if (
+        Alg_Raw_Current.ndim != 1
+        or Alg_Baseline_Current.ndim != 1
+        or len(Alg_Raw_Current) != len(Alg_Baseline_Current)
+        or len(Alg_Raw_Current) == 0
+        or not np.all(np.isfinite(Alg_Raw_Current))
+        or not np.all(np.isfinite(Alg_Baseline_Current))
+    ):
+        return False
+    try:
+        upper, lower = int(Alg_Boundarys[0]), int(Alg_Boundarys[1])
+    except (TypeError, ValueError, IndexError):
+        return False
+    if not 0 <= lower < upper < len(Alg_Raw_Current):
+        return False
+    Alg_Boundarys = (upper, lower)
     higher_counter = np.sum(Alg_Baseline_Current[Alg_Boundarys[1]:Alg_Boundarys[0]+1] > [ a*1.00 for a in Alg_Raw_Current[Alg_Boundarys[1]:Alg_Boundarys[0]+1]])
     if higher_counter > (Alg_Boundarys[0] - Alg_Boundarys[1]) * 0.1:
         return False
@@ -46,7 +62,12 @@ def baseline_fitting_standard(  Alg_Boundarys, Alg_Raw_Current,Alg_Baseline_Curr
             Alg_area_linear += diff
             Alg_area_baseline += abs( Alg_Raw_Current[point_index] - Alg_Baseline_Current[point_index]  )
     
-    if Alg_area_linear > 0:
+    area_tolerance = (
+        np.finfo(float).eps
+        * max(1.0, float(np.max(np.abs(Alg_Raw_Current))))
+        * (Alg_Boundarys[0] - Alg_Boundarys[1])
+    )
+    if Alg_area_linear > area_tolerance:
         if  ( Alg_area_baseline - Alg_area_linear  )/Alg_area_linear < -0.3:
             print('Alg_File_Name_error Area: ', ( Alg_area_baseline - Alg_area_linear  )/Alg_area_linear  )
             return False
@@ -59,6 +80,11 @@ def baseline_fitting_standard(  Alg_Boundarys, Alg_Raw_Current,Alg_Baseline_Curr
         # sums = np.sum(Alg_Baseline_Current[:Alg_Boundarys[1]]) + np.sum(Alg_Baseline_Current[Alg_Boundarys[0]+1:])
     Alg_raw = np.concatenate(( Alg_Raw_Current[ :Alg_Boundarys[1] ], Alg_Raw_Current[Alg_Boundarys[0]: ]))
     Alg_baseline = np.concatenate(( Alg_Baseline_Current[ :Alg_Boundarys[1] ], Alg_Baseline_Current[Alg_Boundarys[0]: ]))
+    if len(Alg_raw) == 0:
+        return False
+    signal_range = np.ptp(Alg_raw)
+    if not np.isfinite(signal_range) or signal_range == 0:
+        return False
     mid_point  = len(  Alg_Raw_Current[ :Alg_Boundarys[1] ]) 
     sigma_2 = ( 0.25*(len(Alg_raw)) ) **2 
     weights = []
@@ -71,13 +97,15 @@ def baseline_fitting_standard(  Alg_Boundarys, Alg_Raw_Current,Alg_Baseline_Curr
             Square_Error.append( (Alg_raw[point_index] - Alg_baseline[point_index] )**2  )
             weights.append( math.exp( - ( point_index  - (mid_point) )**2/sigma_2   )   )
     sum_weights = sum(weights)
+    if sum_weights == 0:
+        return False
     
     MWSE =  0 
 
     for point_index in range( len(Alg_raw)  ):
         MWSE += weights[point_index] * Square_Error[point_index]
     
-    MWSE = MWSE/sum_weights/( np.max(Alg_raw) - np.min(Alg_raw)**2   )
+    MWSE = MWSE / sum_weights / (signal_range ** 2)
     if MWSE > 0.1:
         print('MWSE: ', MWSE)
     #print(pearson_r,p_value)
@@ -166,9 +194,9 @@ def alg_select( args ):
     Baseline_Mean = [] 
     Peak_Mean = []
     Peak_Index = []
-    baselines_select = [] #collect baselines
     Num_Curves =  len( Alg_Data_Baseline )
     for curve_index in range( Num_Curves ):
+        baselines_select = [] #collect baselines for this curve only
         # consisit with the return result(when Curve_CP_index[0] == Curve_CP_index[1] ) in Alg_cal.py cal_baseline() function 
         if not  Alg_Data_Baseline['Curve No. '+str(curve_index+1)]:
             Baseline_Mean.append([])
@@ -179,10 +207,15 @@ def alg_select( args ):
         
         Curve_CP_index = Alg_Data_CPD['Curve No. '+str(curve_index+1)][ "Change Point Indexes "]
         Curve_Potential = Alg_Data_CPD['Curve No. '+str(curve_index+1)]['Raw Poetntial ']
-        Curve_Current = Alg_Data_CPD['Curve No. '+str(curve_index+1)]['Raw Current']
+        curve_data = Alg_Data_CPD['Curve No. '+str(curve_index+1)]
+        Curve_Current = curve_data.get('CPD Smoothed Current', curve_data['Raw Current'])
                     
         if Curve_CP_index[0] == Curve_CP_index[1]:
             print( 'wrong', Alg_File_Name,'Curve No. '+str(curve_index+1), 'Index: ',int(Curve_CP_index[1]),int(Curve_CP_index[0])) 
+            Baseline_Mean.append([])
+            Peak_Mean.append(0)
+            Peak_Index.append(0)
+            continue
         
         for alg in Algs :
             
@@ -219,7 +252,7 @@ def alg_select( args ):
            
             Curve_Peak_Mean,Curve_Peak_Location,Curve_Peak_Index = peak_info(Curve_Potential[ int(Curve_CP_index[1]):int(Curve_CP_index[0]) ],[a - b for a, b in zip(Curve_Current, Curve_Baseline_Mean)][ int(Curve_CP_index[1]):int(Curve_CP_index[0])]  )
             Peak_Mean.append(Curve_Peak_Mean)
-            Peak_Index.append(Curve_Peak_Index)
+            Peak_Index.append(Curve_Peak_Index + int(Curve_CP_index[1]))
             
         else:#dropout
             # print(Alg_File_Name, curve_index,'Failed')
@@ -378,7 +411,9 @@ if __name__ == '__main__':
                             total_num_drop += 1
                             continue
                         peak_file.append ( peak_mean[curve_index]  )
-                        raw_peak_file.append(  data_CPD_folder[file_name]['Curve No. ' + str(curve_index+1)]['Raw Current'][peak_index[curve_index]]  )
+                        curve_data = data_CPD_folder[file_name]['Curve No. ' + str(curve_index+1)]
+                        score_current = curve_data.get('CPD Smoothed Current', curve_data['Raw Current'])
+                        raw_peak_file.append(score_current[peak_index[curve_index]])
 
                     if len(raw_peak_file) != 0:
                         average_raw_peak = sum( raw_peak_file)/len(raw_peak_file)

@@ -1,15 +1,13 @@
-#!/bin/bash
-PORT=5000
+#!/usr/bin/env bash
 
-# Check if the port is in use
-if lsof -i :$PORT; then
-    echo "Port $PORT is already in use. Terminating the process..."
-    PID=$(lsof -t -i :$PORT)
-    kill -9 $PID
-    echo "Process $PID terminated."
-else
-    echo "Port $PORT is free."
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
+PORT="${PORT:-5000}"
+
+if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "Port $PORT is already in use. Stop the existing service and try again." >&2
+    exit 1
 fi
 
-# Start the Flask app
-flask run
+exec python -m flask --app app run --host 127.0.0.1 --port "$PORT"

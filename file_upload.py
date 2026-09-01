@@ -1,206 +1,206 @@
 import os
-import json
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-# JSON file path
-json_file_path = 'database/uploaded_files.json'
+from storage import StorageError, read_json as storage_read_json
+from storage import update_json as storage_update_json
+from storage import write_json as storage_write_json
 
-# Function to list files in the selected directory
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+json_file_path = os.path.join(BASE_DIR, "database", "uploaded_files.json")
+DEFAULT_FILES = {"csv": [], "pssession": []}
+SUPPORTED_TYPES = tuple(DEFAULT_FILES)
+
+app = None
+folder_path = None
+file_type_var = None
+file_list = None
+
+
+def _default_files():
+    return {key: [] for key in SUPPORTED_TYPES}
+
+
+def _normalize_data(data):
+    normalized = _default_files()
+    if isinstance(data, dict):
+        for key in SUPPORTED_TYPES:
+            values = data.get(key, [])
+            if isinstance(values, list):
+                normalized[key] = list(dict.fromkeys(os.fspath(value) for value in values))
+    return normalized
+
+
+def read_json(file_path):
+    return _normalize_data(storage_read_json(file_path, _default_files()))
+
+
+def write_json(file_path, data):
+    storage_write_json(file_path, _normalize_data(data))
+
+
+def _extension(file_type):
+    return "." + str(file_type).lower().lstrip(".")
+
+
+def _matches_type(path, file_type):
+    return os.path.splitext(os.fspath(path))[1].lower() == _extension(file_type)
+
+
+def _listbox_values():
+    return list(file_list.get(0, tk.END)) if file_list is not None else []
+
+
+def _insert_unique(path):
+    if file_list is not None and path not in _listbox_values():
+        file_list.insert(tk.END, path)
+
+
 def list_files_in_directory(directory_path, file_type):
-    # Check if the directory exists
     if not os.path.isdir(directory_path):
         messagebox.showerror("Error", "Invalid directory path!")
         return
-
-    existing_data = read_json(json_file_path)
-
-    # Ensure the file_type key exists in the dictionary
-    if file_type not in existing_data:
-        existing_data[file_type] = []
-
-    # Iterate through files in the directory and add them to the list
-    for root, dirs, files in os.walk(directory_path):
-        for file in files:
-            if file.endswith(file_type):  # Check if file matches the selected type
-                file_path = os.path.join(root, file)
-                if file_path not in existing_data[file_type]:  # Avoid duplicates
-                    file_list.insert(tk.END, file_path)  # Add file path to the list
-                    existing_data[file_type].append(file_path)  # Add to JSON structure
-
-    # Update JSON file with new files
-    write_json(json_file_path, existing_data)
-
-# Function to handle folder selection
-def select_folder():
-    folder_selected = filedialog.askdirectory()  # Open folder selection dialog
-    if folder_selected:
-        folder_path.set(folder_selected)  # Update the folder path label
-        file_type = file_type_var.get()
-        list_files_in_directory(folder_selected, file_type)  # List files in the selected directory
-
-# Function to handle file selection
-def select_files():
-    file_type = file_type_var.get()
-    file_extension = "*.{}".format(file_type)
-    files_selected = filedialog.askopenfilenames(filetypes=[(file_type.upper(), file_extension)])  # Open file selection dialog
-    file_list.delete(0, tk.END)  # Clear existing list
-
-    for file in files_selected:
-        file_list.insert(tk.END, file)  # Add selected file paths to the list
-
-# Function to read JSON data
-def read_json(file_path):
-    try:
-        with open(file_path, 'r') as f:
-            data = json.load(f)
-        # Ensure that the expected keys are present
-        if 'csv' not in data:
-            data['csv'] = []
-        if 'pssession' not in data:
-            data['pssession'] = []
-        return data
-    except (json.JSONDecodeError, FileNotFoundError):
-        return {"csv": []}
-
-# Function to write JSON data
-def write_json(file_path, data):
-    with open(file_path, 'w') as f:
-        json.dump(data, f, indent=4)
-
-# Function to load existing files into the listbox
-def load_existing_files():
-    existing_data = read_json(json_file_path)
-    for file_type, files in existing_data.items():
-        for file in files:
-            file_list.insert(tk.END, file)
-
-# Function to save the file paths to a JSON file
-def save_file_paths():
-    # Get all file paths from the list
-    files = file_list.get(0, tk.END)
-    existing_data = read_json(json_file_path)  # Read existing data from JSON
-    
-    # Append new files to the existing data
-    for file in files:
-        extension = os.path.splitext(file)[1].lower()
-        if extension == '.csv':
-            if file not in existing_data['csv']:
-                existing_data['csv'].append(file)
-        elif extension == '.pssession':
-            if file not in existing_data['pssession']:
-                existing_data['pssession'].append(file)
-    
-     # Save the updated data back to the JSON file
-    write_json(json_file_path, existing_data)
-
-    # Show success message
-    # messagebox.showinfo("Success", f"File paths saved to {json_file_path}!")
-
-# Function to delete selected file paths from the list
-def delete_selected_files():
-    selected_indices = file_list.curselection()
-    if not selected_indices:
-        messagebox.showinfo("Info", "No files selected for deletion.")  # Show info message if nothing is selected
+    if file_type not in SUPPORTED_TYPES:
+        messagebox.showerror("Error", f"Unsupported file type: {file_type}")
         return
 
-    for index in reversed(selected_indices):  # Iterate in reverse order to avoid index shift
-        file_list.delete(index)  # Remove selected file paths from the list
+    discovered = []
+    for root, _, files in os.walk(directory_path):
+        for name in files:
+            path = os.path.normpath(os.path.join(root, name))
+            if _matches_type(path, file_type):
+                discovered.append(path)
+                _insert_unique(path)
 
-    messagebox.showinfo("Success", "Selected file paths have been deleted!")  # Show success message
+    def add_discovered(data):
+        normalized = _normalize_data(data)
+        for path in discovered:
+            if path not in normalized[file_type]:
+                normalized[file_type].append(path)
+        return normalized
 
-# Function to delete all file paths from the list
+    storage_update_json(json_file_path, add_discovered, _default_files())
+
+
+def select_folder():
+    selected = filedialog.askdirectory()
+    if selected:
+        folder_path.set(selected)
+        list_files_in_directory(selected, file_type_var.get())
+
+
+def select_files():
+    selected_type = file_type_var.get()
+    selected = filedialog.askopenfilenames(
+        filetypes=[(selected_type.upper(), f"*.{selected_type}")]
+    )
+    for path in selected:
+        normalized = os.path.normpath(path)
+        if _matches_type(normalized, selected_type):
+            _insert_unique(normalized)
+
+
+def load_existing_files():
+    for paths in read_json(json_file_path).values():
+        for path in paths:
+            _insert_unique(path)
+
+
+def save_file_paths():
+    paths = _listbox_values()
+
+    def add_paths(data):
+        normalized = _normalize_data(data)
+        for path in paths:
+            extension = os.path.splitext(path)[1].lower().lstrip(".")
+            if extension in SUPPORTED_TYPES and path not in normalized[extension]:
+                normalized[extension].append(path)
+        return normalized
+
+    try:
+        storage_update_json(json_file_path, add_paths, _default_files())
+    except StorageError as exc:
+        messagebox.showerror("Storage Error", str(exc))
+        return False
+
+    if app is not None:
+        app.destroy()
+    return True
+
+
+def delete_selected_files():
+    selected_indices = tuple(file_list.curselection())
+    if not selected_indices:
+        messagebox.showinfo("Info", "No files selected for deletion.")
+        return
+
+    selected_paths = {file_list.get(index) for index in selected_indices}
+
+    def remove_paths(data):
+        normalized = _normalize_data(data)
+        for file_type in SUPPORTED_TYPES:
+            normalized[file_type] = [
+                path for path in normalized[file_type] if path not in selected_paths
+            ]
+        return normalized
+
+    storage_update_json(json_file_path, remove_paths, _default_files())
+    for index in reversed(selected_indices):
+        file_list.delete(index)
+    messagebox.showinfo("Success", "Selected file paths have been deleted!")
+
+
 def delete_all_files():
-    # Clear the JSON file content
-    write_json(json_file_path, {"csv": []})
-    file_list.delete(0, tk.END)  # Clear the entire listbox
-    messagebox.showinfo("Success", "All file paths have been deleted!")  # Show success message
+    write_json(json_file_path, _default_files())
+    file_list.delete(0, tk.END)
+    messagebox.showinfo("Success", "All file paths have been deleted!")
 
-# Create the main application window
-app = tk.Tk()
-app.title("Upload File Path")  # Set window title
-app.geometry("800x500")  # Set window size
 
-# Configure grid weights to maintain layout stability
-app.grid_rowconfigure(1, weight=1)  # Allow row 1 to grow
-app.grid_columnconfigure(0, weight=1)  # Allow column 0 to grow
+def build_app():
+    global app, folder_path, file_type_var, file_list
+    app = tk.Tk()
+    app.title("Upload File Path")
+    app.geometry("800x500")
+    app.grid_rowconfigure(1, weight=1)
+    app.grid_columnconfigure(0, weight=1)
 
-# Create a frame for folder selection
-frame = ttk.Frame(app, padding="10")
-frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+    frame = ttk.Frame(app, padding="10")
+    frame.grid(row=0, column=0, sticky="nsew")
+    ttk.Label(frame, text="Current Folder Path:").grid(row=0, column=0, columnspan=3, sticky="ew", pady=5)
+    folder_path = tk.StringVar()
+    ttk.Label(frame, textvariable=folder_path, foreground="#4232a8").grid(
+        row=1, column=0, columnspan=3, sticky="ew", pady=5
+    )
 
-# Add a descriptive label above the folder path
-current_folder_label = ttk.Label(frame, text="Current Folder Path: (Displayed After Selection)")  # Descriptive label
-current_folder_label.grid(row=0, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)  # Position the descriptive label
+    ttk.Label(frame, text="Current File Type:").grid(row=2, column=0, sticky="ew", pady=5)
+    file_type_var = tk.StringVar(value="csv")
+    ttk.Combobox(frame, textvariable=file_type_var, values=SUPPORTED_TYPES, state="readonly").grid(
+        row=2, column=1, pady=5, padx=5, sticky="w"
+    )
+    ttk.Label(frame, text="Select Files:").grid(row=3, column=0, sticky="ew", pady=5)
+    ttk.Button(frame, text="Folder Upload", command=select_folder).grid(row=3, column=1, pady=5, padx=5, sticky="w")
+    ttk.Button(frame, text="Files Upload", command=select_files).grid(row=3, column=2, pady=5, padx=5, sticky="w")
 
-# Add a label to display the selected folder path
-# Define style for red text
-style = ttk.Style()
-style.configure("Red.TLabel", foreground="#4232a8")  # Set text color to red
+    file_list = tk.Listbox(app, height=15, width=80, selectmode=tk.MULTIPLE)
+    file_list.grid(row=1, column=0, pady=5, padx=20, sticky="nsew")
 
-# Add a label to display the selected folder path
-folder_path = tk.StringVar()  # Create a StringVar to store folder path
-folder_label = ttk.Label(frame, textvariable=folder_path, style="Red.TLabel")  # Create a label with the folder path
-folder_label.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)  # Position the label
+    action = ttk.Frame(app, padding="10")
+    action.grid(row=2, column=0, sticky="ew")
+    ttk.Button(action, text="Save and Return", command=save_file_paths).grid(row=0, column=0, pady=10, padx=20)
+    ttk.Button(action, text="Delete Selected Files", command=delete_selected_files).grid(row=0, column=1, pady=10, padx=20)
+    ttk.Button(action, text="Delete All Files", command=delete_all_files).grid(row=0, column=2, pady=10, padx=20)
 
-# Add a descriptive label for file type
-current_file_type_label = ttk.Label(frame, text="Current File Type:")  # Descriptive label
-current_file_type_label.grid(row=2, column=0, sticky=(tk.W, tk.E), pady=5)  # Position the descriptive label
+    try:
+        load_existing_files()
+    except StorageError as exc:
+        messagebox.showerror("Storage Error", str(exc))
+    return app
 
-# Add a dropdown to select file type
-file_type_var = tk.StringVar(value='csv')  # Default file type is CSV
-file_type_dropdown = ttk.Combobox(frame, textvariable=file_type_var, values=['csv', 'pssession'])
-file_type_dropdown.grid(row=2, column=1, pady=5, padx=5, sticky=tk.W)  # Position the dropdown
 
-# Add a descriptive label for file selection
-current_file_label = ttk.Label(frame, text="Select Files:")  # Descriptive label
-current_file_label.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=5)  # Position the descriptive label
+def main():
+    build_app().mainloop()
 
-# Add buttons to open the folder or file selection dialogs
-select_folder_button = ttk.Button(frame, text="Folder Upload", command=select_folder)  # Create a button to select folder
-select_folder_button.grid(row=3, column=1, pady=5, padx=5, sticky=tk.W)  # Position the button
 
-select_files_button = ttk.Button(frame, text="Files Upload", command=select_files)  # Create a button to select files
-select_files_button.grid(row=3, column=2, pady=5, padx=5, sticky=tk.W)  # Position the button
-
-# Add a listbox to display file paths, allow multiple selections
-file_list = tk.Listbox(app, height=15, width=80, selectmode=tk.MULTIPLE)  # Create a listbox for file paths
-file_list.grid(row=1, column=0, pady=5, padx=20, sticky=(tk.W, tk.E, tk.N, tk.S))  # Position the listbox
-
-# Create a frame for the action buttons
-action_frame = ttk.Frame(app, padding="10")
-action_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
-
-# Style configuration for buttons
-# style = ttk.Style()
-style.configure("TButton", padding=6, relief="flat")
-
-style.map("Save.TButton",
-    foreground=[('active', '#388E3C'), ('!disabled', '#4CAF50')],
-    background=[('active', '#388E3C'), ('!disabled', '#4CAF50')]
-)
-
-style.map("DeleteSelected.TButton",
-    foreground=[('active', '#F57C00'), ('!disabled', '#FF9800')],
-    background=[('active', '#F57C00'), ('!disabled', '#FF9800')]
-)
-
-style.map("DeleteAll.TButton",
-    foreground=[('active', '#D32F2F'), ('!disabled', '#F44336')],
-    background=[('active', '#D32F2F'), ('!disabled', '#F44336')]
-)
-
-# Add a button to save file paths to JSON
-save_button = ttk.Button(action_frame, text="Save File Paths", command=save_file_paths, style="Save.TButton")  # Create a button to save file paths
-save_button.grid(row=0, column=0, pady=10, padx=20)  # Position the button
-
-# Add a button to delete selected file paths
-delete_selected_button = ttk.Button(action_frame, text="Delete Selected Files", command=delete_selected_files, style="DeleteSelected.TButton")  # Create a button to delete selected files
-delete_selected_button.grid(row=0, column=1, pady=10, padx=20)  # Position the button
-
-# Add a button to delete all file paths
-delete_all_button = ttk.Button(action_frame, text="Delete All Files", command=delete_all_files, style="DeleteAll.TButton")  # Create a button to delete all files
-delete_all_button.grid(row=0, column=2, pady=10, padx=20)  # Position the button
-
-# Start the Tkinter event loop
-app.mainloop()
+if __name__ == "__main__":
+    main()

@@ -83,7 +83,9 @@
             cursor: pointer;
         }
     </style>
-    <script src="https://cdn.plot.ly/plotly-2.34.0.min.js"></script>
+    <script>window.__apaceAmdDefine = window.define; window.define = undefined;</script>
+    <script>{{ plotly_js|safe }}</script>
+    <script>window.define = window.__apaceAmdDefine; delete window.__apaceAmdDefine;</script>
   </head>
   
   <body>
@@ -109,7 +111,7 @@
       <button class="graph-button" onclick="location.href='/post_exp/3d-graph'">
         Graph
       </button>
-      <button class="exit-button" onclick="handleExit()">Exit</button>
+      <button class="exit-button" onclick="handleExit()">Download Results</button>
     </div>
     <div class="form-container">
       <h1>Graph</h1>
@@ -158,10 +160,7 @@
     </div>
     <script>
       function handleExit() {
-        if (confirm("Are you sure you want to exit and download results?")) {
-            // Trigger a download
-            window.location.href = "/download-results";
-        }
+        window.location.href = "/download-results";
       }
       function generate3DGraph() {
         const checkboxes = document.querySelectorAll(
@@ -172,7 +171,7 @@
         );
 
         if (selectedParams.length < 2 || selectedParams.length > 3) {
-          alert("Please select exactly three parameters.");
+          alert("Please select two or three parameters.");
           return;
         }
 
@@ -192,10 +191,10 @@
             console.log("Response status:", response.status);
             return response.json();
           })
-          .then((graphJSON) => {
-            console.log("Received graph JSON:", graphJSON);
+          .then((payload) => {
             const graphContainer = document.getElementById("graph-container");
-            const graphData = JSON.parse(graphJSON);
+            if (payload.error) throw new Error(payload.error);
+            const graphData = payload.figure;
 
             // Update axis titles
             const layout = graphData.layout;
