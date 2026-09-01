@@ -41,11 +41,20 @@ def process_file(args):
     a = file_read_result[2]#numger of curves
 
     for i in range(a):
-        Curve_CP_index, Curve_CP_value,curve_smooth = Change_Point_Detection.CPD( file_read_result[0][0][i],file_read_result[0][1][i],Alg_seaarch_model, Alg_cost_function,Alg_threshold, Alg_noise_level )
+        raw_current = file_read_result[0][1][i]
+        try:
+            Curve_CP_index, Curve_CP_value,curve_smooth = Change_Point_Detection.CPD( file_read_result[0][0][i],raw_current,Alg_seaarch_model, Alg_cost_function,Alg_threshold, Alg_noise_level )
+        except Exception as error:
+            print(f"{File} curve {i + 1} failed: {error}")
+            Curve_CP_index = (0, 0)
+            fallback = file_read_result[0][0][i][0] if len(file_read_result[0][0][i]) else 0
+            Curve_CP_value = (fallback, fallback)
+            curve_smooth = raw_current
         File_data_save['Curve No. '+str(i+1)] = {
                         'Date and time measurement': file_read_result[1][i],
                         'Raw Poetntial ': file_read_result[0][0][i],
-                        'Raw Current': list(curve_smooth),
+                        'Raw Current': list(raw_current),
+                        'CPD Smoothed Current': list(curve_smooth),
                         'Change Point Indexes ': Curve_CP_index,
                         'Change Point Values ' : Curve_CP_value
             }

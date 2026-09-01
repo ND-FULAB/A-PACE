@@ -85,6 +85,9 @@
             cursor: pointer;
         }
     </style>
+    <script>window.__apaceAmdDefine = window.define; window.define = undefined;</script>
+    <script>{{ plotly_js|safe }}</script>
+    <script>window.define = window.__apaceAmdDefine; delete window.__apaceAmdDefine;</script>
 </head>
 <body>
     <div class="sidebar">
@@ -94,7 +97,7 @@
         <button class="fail-button" onclick="location.href='/post_exp/fail'">Fail</button>
         <button class="add-info-button" onclick="location.href='/post_exp/data-table'">Data Table</button>
         <button class="graph-button" onclick="location.href='/post_exp/3d-graph'">Graph</button>
-        <button class="exit-button" onclick="handleExit()">Exit</button>
+        <button class="exit-button" onclick="handleExit()">Download Results</button>
     </div>
     <div class="form-container">
         <h1>Fail Graphs</h1>
@@ -109,24 +112,33 @@
         <div class="graphs-container">
             {% for graph in graphs %}
                 <div class="graph">
-                    <input type="checkbox" value="{{ graph.file_name }}_{{ graph.curve_no }}">
+                    <input type="checkbox" class="graph-checkbox"
+                           data-file-name="{{ graph.file_name|e }}"
+                           data-curve-no="{{ graph.curve_no|e }}">
                     {{ graph.html|safe }}
                 </div>
             {% endfor %}
         </div>
+        {% if total_graphs %}
+        <div class="pagination-info">
+            {% if page > 1 %}<a href="{{ url_for('fail_graphs', page=page-1) }}">Previous</a>{% endif %}
+            <span>Page {{ page }} of {{ total_pages }} - Graphs {{ current_start }}-{{ current_end }} of {{ total_graphs }}</span>
+            {% if page < total_pages %}<a href="{{ url_for('fail_graphs', page=page+1) }}">Next</a>{% endif %}
+        </div>
+        {% endif %}
     </div>
     <script>
         function handleExit() {
-            if (confirm("Are you sure you want to exit and download results?")) {
-                // Trigger a download
-                window.location.href = "/download-results";
-            }
+            window.location.href = "/download-results";
+        }
+        function selectedGraphReferences() {
+            return Array.from(document.querySelectorAll('.graph-checkbox:checked')).map(checkbox => ({
+                file_name: checkbox.dataset.fileName,
+                curve_no: checkbox.dataset.curveNo
+            }));
         }
         function restoreSelectedGraphs() {
-            const selectedGraphs = [];
-            document.querySelectorAll('input[type=checkbox]:checked').forEach(checkbox => {
-                selectedGraphs.push(checkbox.value);
-            });
+            const selectedGraphs = selectedGraphReferences();
             fetch('/post_exp/restore_graphs', {
                 method: 'POST',
                 headers: {
@@ -141,10 +153,7 @@
         }
         
         function updateSelectedGraphs() {
-            const selectedGraphs = [];
-            document.querySelectorAll('input[type=checkbox]:checked').forEach(checkbox => {
-                selectedGraphs.push(checkbox.value);
-            });
+            const selectedGraphs = selectedGraphReferences();
             console.log("Selected graphs to update:", selectedGraphs);
 
             showRangePop(selectedGraphs);
@@ -198,13 +207,14 @@
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({ left_val: leftVal, right_val: rightVal, graphs: selectedGraphs }),
-            }).then(response => {
-                if (response.ok) {
-                    showSuccessMsg();
-                }
-                return response.json();
+            }).then(async response => {
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.error || 'Update failed');
+                showSuccessMsg();
+                setTimeout(() => location.reload(), 500);
             }).catch(error => {
                 console.error("Fetch error:", error);
+                alert(error.message);
             });
         }
         

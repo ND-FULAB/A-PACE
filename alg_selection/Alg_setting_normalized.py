@@ -18,6 +18,8 @@ def find_opt(args):
     weight,All_combs_details = args
     #print(weight)
     Alg_comb_index = list(All_combs_details.keys())  
+    if not Alg_comb_index:
+        raise ValueError("algorithm details cannot be empty")
     user_utility = []
     for single_combo in Alg_comb_index:  
         if weight == .0:
@@ -31,7 +33,7 @@ def find_opt(args):
     #print(user_utility[optimal_index])
 
     
-    return str(optimal_index) 
+    return Alg_comb_index[optimal_index]
     
 
 
@@ -51,10 +53,10 @@ if __name__ == '__main__':
         all_NWMSE.append( all_combs_details[comb]["Mean Square Error"]  )
 
     SR_mean = sum(all_SR)/len(all_SR)
-    SR_std =  statistics.pstdev(all_SR)
+    SR_std = statistics.pstdev(all_SR) or 1.0
 
     NWMSE_mean = sum(all_NWMSE)/len(all_NWMSE)
-    NWMSE_std =  statistics.pstdev(all_NWMSE)
+    NWMSE_std = statistics.pstdev(all_NWMSE) or 1.0
 
 
     print('The ideal point is :', [ (1 - SR_mean)/SR_std ] , ( 0 - NWMSE_mean)/NWMSE_std  )
@@ -100,7 +102,7 @@ if __name__ == '__main__':
     args = (1.,all_combs_details)
     selected_index = find_opt(args)
     select_combs_details[weight_index] = {}
-    select_combs_details[weight_index]['Success Weight'] = 1. 
+    select_combs_details[weight_index]['Success Weight'] = weight_index / 100.0
     select_combs_details[weight_index]['Baseline Fitting Algorithms'] = all_combs_details[selected_index]['Baseline Fitting Algorithms']
     select_combs_details[weight_index]['Ratio For Peak'] = all_combs_details[selected_index]['Ratio For Peak']
     select_combs_details[weight_index]['CPD Search Model'] = all_combs_details[selected_index]['CPD Search Model']
@@ -124,7 +126,7 @@ if __name__ == '__main__':
     for result in results: # reuslt:file level ; results:folder level
         selected_index =  result
         select_combs_details[weight_index] = {}
-        select_combs_details[weight_index]['Success Weight'] = 1. 
+        select_combs_details[weight_index]['Success Weight'] = weight_index / 100.0
         select_combs_details[weight_index]['Baseline Fitting Algorithms'] = all_combs_details[selected_index]['Baseline Fitting Algorithms']
         select_combs_details[weight_index]['Ratio For Peak'] = all_combs_details[selected_index]['Ratio For Peak']
         select_combs_details[weight_index]['CPD Search Model'] = all_combs_details[selected_index]['CPD Search Model']

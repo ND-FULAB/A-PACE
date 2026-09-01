@@ -1,892 +1,1422 @@
-''' APACE GUI '''
+"""APACE local web application."""
 
-import sys
-from flask import Flask, Response, render_template, request, redirect, send_file, url_for, jsonify
-import json
-import os
-import subprocess
-import logging
-import pandas as pd
-import plotly.graph_objs as go
-import plotly.express as px
-import plotly.io as pio
-from plotly.subplots import make_subplots
-import demo
+from __future__ import annotations
+
 import ast
-import atexit
+import json
+import logging
+import math
+import subprocess
+import sys
 import threading
-from werkzeug.serving import make_server
-from datetime import datetime  # Added for timestamp
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
 import numpy as np
-from real_time_analysis import run_real_time_analysis
+import plotly.express as px
+import plotly.graph_objects as go
+import plotly.io as pio
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    url_for,
+)
+from plotly.offline import get_plotlyjs
+from plotly.subplots import make_subplots
+
+import Change_Point_Detection
+import demo
 from CPD_change import process_file
+from storage import (
+    ALGORITHM_SETTINGS_PATH,
+    DATA_TABLE_PATH,
+    LEGACY_FAIL_GRAPHS_PATH,
+    LEGACY_PASS_GRAPHS_PATH,
+    PARAMETERS_PATH,
+    PROJECT_ROOT,
+    REAL_TIME_FOLDER_PATH,
+    RESULTS_PATH,
+    UPLOADED_FILES_PATH,
+    UPLOADED_FOLDER_PATH,
+    StorageError,
+    read_json as storage_read_json,
+    update_json,
+    write_json as storage_write_json,
+)
+
+
 app = Flask(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+DEMO_JSON_PATH = RESULTS_PATH
+PASS_GRAPHS_PATH = LEGACY_PASS_GRAPHS_PATH
+FAIL_GRAPHS_PATH = LEGACY_FAIL_GRAPHS_PATH
+ALLOWED_EXTENSIONS = {"csv", "pssession"}
+REVIEW_STATUS_KEY = "review_status"
+BASELINE_CI_99_KEY = "99\\% Confidence Interval of Baseline: "
+BASELINE_CI_95_KEY = "95\\% Confidence Interval of Baseline: "
+PEAK_CI_99_KEY = "99\\% Confidence Interval of Peak Value"
+PEAK_CI_95_KEY = "95\\% Confidence Interval of Peak Value"
+PEAK_WIDTH_KEY = "Peak Width at Half Maximum"
+PEAK_POTENTIAL_LOCATION_KEY = "Peak Potential Location"
+PAGE_SIZE = 15
 PALETTE = px.colors.qualitative.Pastel
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-deleted_graphs: list[tuple[str, str, dict]] = []
+_analysis_lock = threading.Lock()
+_analysis_status_lock = threading.Lock()
+_analysis_status: dict[str, Any] = {
+    "state": "idle",
+    "percent": 0,
+    "message": "Ready to analyze.",
+    "completed_files": 0,
+    "total_files": 0,
+}
+_realtime_lock = threading.Lock()
+_realtime_process: subprocess.Popen[Any] | None = None
+_file_upload_lock = threading.Lock()
+_file_upload_process: subprocess.Popen[Any] | None = None
 
-# File paths
-DATA_DIR = 'database'
-DEMO_JSON_PATH = os.path.join(DATA_DIR, 'results.json')
-DATA_TABLE_PATH = os.path.join(DATA_DIR, 'data_table.json')
-UPLOADED_FILES_PATH = os.path.join(DATA_DIR, 'uploaded_files.json')
-UPLOADED_FOLDER_PATH = os.path.join(DATA_DIR, 'uploaded_folder.json')
-PASS_GRAPHS_PATH = os.path.join(DATA_DIR, 'pass_graphs.json')
-FAIL_GRAPHS_PATH = os.path.join(DATA_DIR, 'fail_graphs.json')
-ALGORITHM_SETTINGS_PATH = 'Algorithm Setting.json'
-REAL_TIME_FOLDER_PATH = os.path.join(DATA_DIR, 'real_time_folder_path.json')
-ALLOWED_EXTENSIONS = {'csv', 'pssession'}
 
-# Utility Functions
-def read_json(file_path):
-    """Read JSON from file, return empty dict on error or if file doesn't exist."""
-    try:
-        if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-            with open(file_path, 'r') as f:
-                return json.load(f)
-        return {}
-    except json.JSONDecodeError as e:
-        logging.error(f"Invalid JSON in {file_path}: {e}")
-        return {}
-    except Exception as e:
-        logging.error(f"Error reading {file_path}: {e}")
-        return {}
+def _set_analysis_status(
+    state: str,
+    percent: float,
+    message: str,
+    completed_files: int = 0,
+    total_files: int = 0,
+) -> None:
+    """Publish a bounded, thread-safe analysis progress snapshot."""
 
-def write_json(file_path, data):
-    """Write JSON to file, create directories if needed."""
-    try:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, 'w') as f:
-            json.dump(data, f, indent=4)
-    except Exception as e:
-        logging.error(f"Error writing to {file_path}: {e}")
-        raise
-
-def allowed_file(filename, file_type):
-    """Check if filename has allowed extension and matches file_type."""
-    return ('.' in filename and 
-            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS and 
-            filename.rsplit('.', 1)[1].lower() == file_type)
-
-def initialize_data_table(json_dataset):
-    """Initialize data_table.json with data from json_dataset."""
-    data_table = {}
-    for file, curves in json_dataset.items():
-        data_table[file] = {}
-        for curve, data in curves.items():
-            data_table[file][curve] = {
-                "Date and time measurement": data.get("Date and time measurement", ""),
-                "Frequence ": data.get("Frequence ", ""),
-                "Amplitude ": data.get("Amplitude ", ""),
-                "Peak Value ": data.get("Peak Value ", ""),
-                "Channel ": data.get("Channel ", ""),
-                "Concentration": data.get("Concentration", "")
+    bounded_percent = max(0, min(100, int(round(percent))))
+    bounded_total = max(0, int(total_files))
+    bounded_completed = max(0, min(int(completed_files), bounded_total))
+    with _analysis_status_lock:
+        _analysis_status.update(
+            {
+                "state": state,
+                "percent": bounded_percent,
+                "message": str(message),
+                "completed_files": bounded_completed,
+                "total_files": bounded_total,
             }
-    write_json(DATA_TABLE_PATH, data_table)
-    return data_table
+        )
 
-# Routes
-@app.route('/')
-def index():
-    return render_template('index.html')
 
-@app.route('/save_folder_path', methods=['GET', 'POST'])
-def save_folder_path():
-    data = request.get_json()
-    print('data', data)
-    folder_path = data.get('folder_path')
-    
-    if not folder_path:
-        return jsonify({"error": "No folder path provided"}), 400
+def _analysis_status_snapshot() -> dict[str, Any]:
+    with _analysis_status_lock:
+        return dict(_analysis_status)
 
-    # Save the folder path to a JSON file
-    with open('database/real_time_folder_path.json', 'w') as f:
-        json.dump({"folder_path": folder_path}, f)
 
-    return jsonify({"status": "Folder path saved"}), 200
+def read_json(file_path: str | Path, default: Any | None = None) -> Any:
+    """Compatibility wrapper around the process-safe storage layer."""
 
-def start_real_time_analysis(SR_weight, noise_level, Threshold, SlipWindow):
-    # 1) read folder path
-    path = json.load(open(REAL_TIME_FOLDER_PATH))["folder_path"]
-    if not path:
-        logging.error("Real-time folder path missing")
-        return
+    return storage_read_json(file_path, default)
 
-    # 2) load your alg settings
-    data_algs = json.load(open(ALGORITHM_SETTINGS_PATH, 'r'))
-    name      = str(int(SR_weight/0.01))
-    CPD_SM    = data_algs[name]["CPD Search Model"]
-    CPD_CF    = data_algs[name]["CPD Cost Function"]
-    peak_ratio= Threshold                # same as your 5th param
-    fitlist   = ast.literal_eval(data_algs[name]["Baseline Fitting Algorithms"])
-    fitlist_json = json.dumps(fitlist)
 
-    # 3) spawn the exact same 7 args in the same order
-    script = os.path.join(os.path.dirname(__file__), "real_time_analysis.py")
-    subprocess.Popen([
-        sys.executable,        # ensures the same venv python is used
-        script,                # your real_time_analysis.py file
-        path,                  # 1) folder path
-        str(SlipWindow),       # 2) slip window
-        CPD_SM,                # 3) CPD search model
-        CPD_CF,                # 4) CPD cost function
-        str(peak_ratio),       # 5) peak ratio
-        str(noise_level),      # 6) noise level
-        fitlist_json           # 7) fitting algorithm list
-    ], cwd=os.path.dirname(__file__))
+def write_json(file_path: str | Path, data: Any) -> None:
+    """Compatibility wrapper around the process-safe storage layer."""
 
-@app.route('/real_time', methods=['POST', 'GET'])
-def real_time():
-    if request.method == 'POST':
-        try:
-            data = request.get_json()
-            print('param data')
-            print(data)
-            if not data:
-                return jsonify({"error": "No data received"}), 400
+    storage_write_json(file_path, data)
 
-            SR_weight = float(data.get('successWeight', 0.5))
-            noise_level = int(data.get('noiseLevel', 2))
-            Threshold = float(data.get('Threshold', 0.65))
-            SlipWindow = int(data.get('SlipWindow', 5))
 
-            # Just call start_real_time_analysis, which will now launch subprocess
-            start_real_time_analysis(SR_weight, noise_level, Threshold, SlipWindow)
+def allowed_file(filename: str, file_type: str) -> bool:
+    suffix = Path(filename).suffix.lower().lstrip(".")
+    return suffix in ALLOWED_EXTENSIONS and suffix == file_type
 
-            return jsonify({"status": "success", "message": "Real-time analysis started"}), 200
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
 
-    # If GET request, just show the page
-    files = read_json(UPLOADED_FOLDER_PATH)
+def is_json_files_empty(file_path: str | Path) -> bool:
+    return not bool(read_json(file_path, {}))
+
+
+def _json_object() -> dict[str, Any]:
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise ValueError("Request body must be a JSON object.")
+    return payload
+
+
+def _finite_number(payload: dict[str, Any], key: str, default: float) -> float:
     try:
-        with open('uploaded_folder.json', 'r') as f:
-            uploaded_files = json.load(f)
-            files.update(uploaded_files)
-    except FileNotFoundError:
+        value = float(payload.get(key, default))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{key} must be a number.") from exc
+    if not math.isfinite(value):
+        raise ValueError(f"{key} must be finite.")
+    return value
+
+
+def _analysis_parameters(
+    payload: dict[str, Any], *, realtime: bool = False
+) -> tuple[float, int, float, int | None]:
+    weight = _finite_number(payload, "successWeight", 0.5)
+    weight_key = round(weight * 100)
+    if not 0 <= weight <= 1 or not math.isclose(
+        weight * 100, weight_key, abs_tol=1e-9
+    ):
+        raise ValueError("successWeight must be between 0 and 1 in steps of 0.01.")
+
+    noise_raw = _finite_number(payload, "noiseLevel", 2)
+    noise_level = int(noise_raw)
+    if noise_raw != noise_level or noise_level not in {1, 2, 3}:
+        raise ValueError("noiseLevel must be an integer from 1 to 3.")
+
+    threshold = _finite_number(payload, "Threshold", 0.65)
+    if not 0.2 <= threshold <= 0.85:
+        raise ValueError("Peak Width Threshold must be between 0.2 and 0.85.")
+
+    sliding_window: int | None = None
+    if realtime:
+        window_raw = _finite_number(payload, "SlidingWindow", 5)
+        sliding_window = int(window_raw)
+        if window_raw != sliding_window or not 1 <= sliding_window <= 50:
+            raise ValueError("SlidingWindow must be an integer from 1 to 50.")
+
+    return weight, noise_level, threshold, sliding_window
+
+
+def algorithm_key(success_weight: float) -> str:
+    """Map every valid hundredth to the corresponding algorithm setting."""
+
+    return str(round(success_weight * 100))
+
+
+def _algorithm_settings(success_weight: float) -> tuple[dict[str, Any], list[str]]:
+    try:
+        with ALGORITHM_SETTINGS_PATH.open("r", encoding="utf-8") as handle:
+            settings = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Cannot load algorithm settings: {exc}") from exc
+
+    key = algorithm_key(success_weight)
+    if key not in settings:
+        raise ValueError(f"No algorithm setting exists for successWeight={success_weight}.")
+    selected = settings[key]
+    try:
+        fitting = ast.literal_eval(selected["Baseline Fitting Algorithms"])
+    except (KeyError, SyntaxError, ValueError) as exc:
+        raise RuntimeError(f"Algorithm setting {key} is invalid.") from exc
+    if not isinstance(fitting, (list, tuple)):
+        raise RuntimeError(f"Algorithm setting {key} has an invalid fitting list.")
+    return selected, list(fitting)
+
+
+def _normalise_status(value: Any, peak_value: Any = 0) -> str:
+    if isinstance(value, str) and value.lower() in {"pass", "fail"}:
+        return value.lower()
+    try:
+        return "pass" if float(peak_value) != 0 else "fail"
+    except (TypeError, ValueError):
+        return "fail"
+
+
+def load_results(*, persist_migration: bool = True) -> dict[str, dict[str, dict[str, Any]]]:
+    """Load results and migrate legacy pass/fail files into review_status."""
+
+    legacy_pass = read_json(LEGACY_PASS_GRAPHS_PATH, {})
+    legacy_fail = read_json(LEGACY_FAIL_GRAPHS_PATH, {})
+
+    def migrate(results: Any) -> dict[str, Any]:
+        if not isinstance(results, dict):
+            raise StorageError("results.json must contain a JSON object.")
+        for file_name, curves in results.items():
+            if not isinstance(curves, dict):
+                continue
+            for curve_no, curve in curves.items():
+                if not isinstance(curve, dict):
+                    continue
+                legacy_status = None
+                if isinstance(legacy_pass, dict) and curve_no in legacy_pass.get(file_name, {}):
+                    legacy_status = "pass"
+                if isinstance(legacy_fail, dict) and curve_no in legacy_fail.get(file_name, {}):
+                    legacy_status = "fail"
+                current_status = curve.get(REVIEW_STATUS_KEY)
+                if not (
+                    isinstance(current_status, str)
+                    and current_status.lower() in {"pass", "fail"}
+                ):
+                    current_status = legacy_status
+                status = _normalise_status(current_status, curve.get("Peak Value ", 0))
+                curve[REVIEW_STATUS_KEY] = status
+        return results
+
+    results = read_json(RESULTS_PATH, {})
+    if not isinstance(results, dict):
+        raise StorageError("results.json must contain a JSON object.")
+    needs_migration = any(
+        not isinstance(curve.get(REVIEW_STATUS_KEY), str)
+        or curve.get(REVIEW_STATUS_KEY, "").lower() not in {"pass", "fail"}
+        or curve.get(REVIEW_STATUS_KEY) != curve.get(REVIEW_STATUS_KEY, "").lower()
+        for curves in results.values()
+        if isinstance(curves, dict)
+        for curve in curves.values()
+        if isinstance(curve, dict)
+    )
+    if persist_migration and needs_migration:
+        return update_json(RESULTS_PATH, migrate, {})
+    return migrate(results)
+
+
+def _table_row(curve: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "Date and time measurement": curve.get("Date and time measurement", ""),
+        "Frequence ": curve.get("Frequence ", ""),
+        "Amplitude ": curve.get("Amplitude ", ""),
+        "Peak Value ": curve.get("Peak Value ", ""),
+        PEAK_WIDTH_KEY: curve.get(PEAK_WIDTH_KEY, ""),
+        PEAK_POTENTIAL_LOCATION_KEY: curve.get("Peak Location: ", ""),
+        "Channel ": curve.get("Channel ", curve.get("Channel", "")),
+        "Concentration": curve.get("Concentration", curve.get("Concentration ", "")),
+    }
+
+
+def display_file_name(file_path: Any) -> str:
+    """Return a path's final component for compact table display."""
+
+    normalised = str(file_path).replace("\\", "/")
+    return normalised.rsplit("/", 1)[-1]
+
+
+def initialize_data_table(
+    json_dataset: dict[str, Any],
+) -> dict[str, Any]:
+    """Synchronise result rows while retaining fields edited in the UI."""
+
+    editable = {
+        "Date and time measurement",
+        "Frequence ",
+        "Amplitude ",
+        "Concentration",
+    }
+    def synchronise(existing: Any) -> dict[str, Any]:
+        if not isinstance(existing, dict):
+            existing = {}
+        table: dict[str, Any] = {}
+        for file_name, curves in json_dataset.items():
+            if not isinstance(curves, dict):
+                continue
+            table[file_name] = {}
+            for curve_no, curve in curves.items():
+                if not isinstance(curve, dict):
+                    continue
+                row = _table_row(curve)
+                previous = existing.get(file_name, {}).get(curve_no, {})
+                if isinstance(previous, dict):
+                    for key in editable:
+                        if previous.get(key) not in (None, ""):
+                            row[key] = previous[key]
+                table[file_name][curve_no] = row
+        return table
+
+    return update_json(DATA_TABLE_PATH, synchronise, {})
+
+
+def _calculate_stored_peak_width(curve: dict[str, Any], noise_level: int) -> float | None:
+    """Recreate FWHM for a legacy curve without changing its saved metrics."""
+
+    try:
+        potential = np.asarray(
+            curve.get("Raw Poetntial ", curve.get("Raw Potential ", [])), dtype=float
+        )
+        current = np.asarray(curve.get("Raw Current", []), dtype=float)
+        baseline = np.asarray(curve.get("Baseline Mean ", []), dtype=float)
+    except (TypeError, ValueError):
+        return None
+    indexes = curve.get("Change Point Indexes ", [])
+    if (
+        potential.ndim != 1
+        or current.ndim != 1
+        or baseline.ndim != 1
+        or len(potential) != len(current)
+        or len(current) != len(baseline)
+        or not isinstance(indexes, (list, tuple))
+        or len(indexes) < 2
+    ):
+        return None
+
+    try:
+        lower_index, upper_index = sorted((int(indexes[0]), int(indexes[1])))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if lower_index < 0 or upper_index > len(current) or lower_index >= upper_index:
+        return None
+
+    try:
+        smoothed = Change_Point_Detection.smooth_signal(
+            current, noise_level, polyorder=3
+        )
+        corrected_peak = (smoothed - baseline)[lower_index:upper_index]
+        _, _, _, peak_width = demo.peak_metrics(
+            potential[lower_index:upper_index], corrected_peak
+        )
+    except (TypeError, ValueError, IndexError, FloatingPointError):
+        return None
+    return peak_width
+
+
+def _backfill_missing_peak_widths(results: dict[str, Any]) -> dict[str, Any]:
+    """Atomically add FWHM only to legacy curves where the key is absent."""
+
+    needs_backfill = any(
+        PEAK_WIDTH_KEY not in curve
+        for curves in results.values()
+        if isinstance(curves, dict)
+        for curve in curves.values()
+        if isinstance(curve, dict)
+    )
+    if not needs_backfill:
+        return results
+
+    parameters = read_json(PARAMETERS_PATH, {})
+    try:
+        noise_level = int(parameters.get("noiseLevel", 2))
+    except (AttributeError, TypeError, ValueError):
+        noise_level = 2
+    if noise_level not in {1, 2, 3}:
+        noise_level = 2
+
+    def add_widths(current: Any) -> dict[str, Any]:
+        if not isinstance(current, dict):
+            raise StorageError("results.json must contain a JSON object.")
+        for curves in current.values():
+            if not isinstance(curves, dict):
+                continue
+            for curve in curves.values():
+                if isinstance(curve, dict) and PEAK_WIDTH_KEY not in curve:
+                    curve[PEAK_WIDTH_KEY] = _calculate_stored_peak_width(
+                        curve, noise_level
+                    )
+        return current
+
+    return update_json(RESULTS_PATH, add_widths, {})
+
+
+def _all_uploaded_files(data: dict[str, Any]) -> list[str]:
+    files: list[str] = []
+    for file_type in ALLOWED_EXTENSIONS:
+        values = data.get(file_type, [])
+        if isinstance(values, list):
+            files.extend(str(value) for value in values)
+    return files
+
+
+def _run_script(script_name: str) -> subprocess.Popen[Any]:
+    script = PROJECT_ROOT / script_name
+    if not script.is_file():
+        raise FileNotFoundError(f"Missing helper script: {script_name}")
+    return subprocess.Popen([sys.executable, str(script)], cwd=str(PROJECT_ROOT))
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/save_folder_path", methods=["POST"])
+def save_folder_path():
+    try:
+        payload = _json_object()
+        raw_path = payload.get("folder_path")
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            raise ValueError("folder_path is required.")
+        folder = Path(raw_path).expanduser().resolve()
+        if not folder.is_dir():
+            raise ValueError("folder_path must be an existing directory.")
+        write_json(REAL_TIME_FOLDER_PATH, {"folder_path": str(folder)})
+        return jsonify(status="success", folder_path=str(folder))
+    except (ValueError, StorageError) as exc:
+        return jsonify(error=str(exc)), 400
+
+
+def start_real_time_analysis(
+    success_weight: float,
+    noise_level: int,
+    threshold: float,
+    sliding_window: int,
+) -> subprocess.Popen[Any]:
+    folder_config = read_json(REAL_TIME_FOLDER_PATH, {"folder_path": ""})
+    raw_path = folder_config.get("folder_path", "") if isinstance(folder_config, dict) else ""
+    folder = Path(raw_path).expanduser().resolve() if raw_path else None
+    if folder is None or not folder.is_dir():
+        raise ValueError("Select an existing real-time folder before starting.")
+
+    selected, fitting = _algorithm_settings(success_weight)
+    script = PROJECT_ROOT / "real_time_analysis.py"
+    command = [
+        sys.executable,
+        str(script),
+        str(folder),
+        str(sliding_window),
+        str(selected["CPD Search Model"]),
+        str(selected["CPD Cost Function"]),
+        str(threshold),
+        str(noise_level),
+        json.dumps(fitting),
+    ]
+    return subprocess.Popen(command, cwd=str(PROJECT_ROOT))
+
+
+@app.route("/real_time", methods=["GET", "POST"])
+def real_time():
+    global _realtime_process
+
+    if request.method == "GET":
+        files = read_json(UPLOADED_FOLDER_PATH, {"csv": [], "pssession": []})
+        return render_template("real_time.html", files=files)
+
+    try:
+        payload = _json_object()
+        weight, noise, threshold, window = _analysis_parameters(payload, realtime=True)
+        assert window is not None
+        with _realtime_lock:
+            if _analysis_lock.locked():
+                return jsonify(error="Post-experiment analysis is already running."), 409
+            if _realtime_process is not None and _realtime_process.poll() is None:
+                return jsonify(error="Real-time analysis is already running."), 409
+            _realtime_process = start_real_time_analysis(weight, noise, threshold, window)
+        return jsonify(
+            status="success",
+            message="Real-time analysis started.",
+            pid=_realtime_process.pid,
+        )
+    except (ValueError, KeyError, RuntimeError, StorageError, OSError) as exc:
+        logging.exception("Unable to start real-time analysis")
+        return jsonify(error=str(exc)), 400
+
+
+@app.route("/launch_folder_gui", methods=["POST"])
+def launch_folder_gui():
+    try:
+        process = _run_script("folder_upload.py")
+        return jsonify(status="success", pid=process.pid)
+    except OSError as exc:
+        return jsonify(error=str(exc)), 500
+
+
+@app.route("/post_exp")
+def post_exp():
+    return render_template("post_exp.html")
+
+
+@app.route("/launch_file_gui", methods=["POST"])
+def launch_file_gui():
+    global _file_upload_process
+
+    with _file_upload_lock:
+        if (
+            _file_upload_process is not None
+            and _file_upload_process.poll() is None
+        ):
+            return jsonify(
+                status="already_running", pid=_file_upload_process.pid
+            )
+
+        try:
+            _file_upload_process = _run_script("file_upload.py")
+        except OSError as exc:
+            return jsonify(error=str(exc)), 500
+
+        return jsonify(status="success", pid=_file_upload_process.pid)
+
+
+@app.route("/launch_file_gui/status/<int:pid>")
+def file_gui_status(pid: int):
+    with _file_upload_lock:
+        process = _file_upload_process
+        if process is None or process.pid != pid:
+            return jsonify(error="Unknown file-upload process."), 404
+
+        returncode = process.poll()
+        return jsonify(
+            pid=pid,
+            running=returncode is None,
+            returncode=returncode,
+        )
+
+
+@app.route("/post_exp/upload")
+def upload():
+    files = read_json(UPLOADED_FILES_PATH, {"csv": [], "pssession": []})
+    return render_template("upload.html", files=files)
+
+
+@app.route("/post_exp/upload/data/status")
+def analysis_status():
+    """Return the latest file-level batch-analysis progress snapshot."""
+
+    response = jsonify(_analysis_status_snapshot())
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/post_exp/upload/data", methods=["POST"])
+def analyze():
+    if not _analysis_lock.acquire(blocking=False):
+        return jsonify(error="An analysis is already running."), 409
+
+    _set_analysis_status("running", 0, "Preparing analysis...")
+    try:
+        with _realtime_lock:
+            if _realtime_process is not None and _realtime_process.poll() is None:
+                message = "Real-time analysis is already running."
+                _set_analysis_status("error", 0, message)
+                return jsonify(error=message), 409
+
+        payload = _json_object()
+        weight, noise, threshold, _ = _analysis_parameters(payload)
+        _set_analysis_status("running", 5, "Validating selected files...")
+        uploaded = read_json(UPLOADED_FILES_PATH, {"csv": [], "pssession": []})
+        if not isinstance(uploaded, dict):
+            raise ValueError("The uploaded-file list is invalid.")
+        files = _all_uploaded_files(uploaded)
+        if not files:
+            raise ValueError("Upload at least one CSV or pssession file.")
+        missing = [name for name in files if not Path(name).is_file()]
+        if missing:
+            raise ValueError(f"Uploaded file no longer exists: {missing[0]}")
+
+        total_files = len(files)
+        _set_analysis_status(
+            "running",
+            10,
+            f"Reading {total_files} selected file(s)...",
+            total_files=total_files,
+        )
+        selected, fitting = _algorithm_settings(weight)
+        write_json(
+            PARAMETERS_PATH,
+            {
+                "successWeight": weight,
+                "noiseLevel": noise,
+                "Threshold": threshold,
+            },
+        )
+        input_data = {
+            "csv": {"file_names": uploaded.get("csv", [])},
+            "pssession": {"file_names": uploaded.get("pssession", [])},
+        }
+
+        def report_progress(
+            percent: float,
+            message: str,
+            completed_files: int | None = None,
+            total_files: int | None = None,
+        ) -> None:
+            current = _analysis_status_snapshot()
+            _set_analysis_status(
+                "running",
+                percent,
+                message,
+                (
+                    current["completed_files"]
+                    if completed_files is None
+                    else completed_files
+                ),
+                current["total_files"] if total_files is None else total_files,
+            )
+
+        returned = demo.data_analysis(
+            input_data,
+            selected["CPD Search Model"],
+            selected["CPD Cost Function"],
+            threshold,
+            noise,
+            fitting,
+            progress_callback=report_progress,
+        )
+        _set_analysis_status(
+            "running",
+            94,
+            "Preparing analysis results...",
+            completed_files=total_files,
+            total_files=total_files,
+        )
+        results = returned if isinstance(returned, dict) else read_json(RESULTS_PATH, {})
+        if not isinstance(results, dict):
+            raise RuntimeError("Analysis did not produce a valid result set.")
+        for curves in results.values():
+            if not isinstance(curves, dict):
+                continue
+            for curve in curves.values():
+                if isinstance(curve, dict):
+                    curve[REVIEW_STATUS_KEY] = _normalise_status(
+                        curve.get(REVIEW_STATUS_KEY), curve.get("Peak Value ", 0)
+                    )
+        _set_analysis_status(
+            "running",
+            97,
+            "Saving results...",
+            completed_files=total_files,
+            total_files=total_files,
+        )
+        write_json(RESULTS_PATH, results)
+        _set_analysis_status(
+            "running",
+            99,
+            "Updating the data table...",
+            completed_files=total_files,
+            total_files=total_files,
+        )
+        initialize_data_table(results)
+        message = "Data analysis complete."
+        _set_analysis_status(
+            "success",
+            100,
+            message,
+            completed_files=total_files,
+            total_files=total_files,
+        )
+        return jsonify(
+            status="success",
+            message=message,
+            redirect_url=url_for("pass_graphs"),
+        )
+    except (ValueError, KeyError, RuntimeError, StorageError, OSError) as exc:
+        logging.exception("Analysis failed")
+        current = _analysis_status_snapshot()
+        _set_analysis_status(
+            "error",
+            current["percent"],
+            str(exc),
+            current["completed_files"],
+            current["total_files"],
+        )
+        return jsonify(error=str(exc)), 400
+    except Exception:
+        logging.exception("Unexpected analysis failure")
+        message = "Analysis failed unexpectedly. Check the application log for details."
+        current = _analysis_status_snapshot()
+        _set_analysis_status(
+            "error",
+            current["percent"],
+            message,
+            current["completed_files"],
+            current["total_files"],
+        )
+        return jsonify(error=message), 500
+    finally:
+        _analysis_lock.release()
+
+
+def _delete_uploaded(path: Path, files_to_delete: list[str] | None = None) -> None:
+    def remove(data: Any) -> dict[str, list[str]]:
+        current = data if isinstance(data, dict) else {"csv": [], "pssession": []}
+        if files_to_delete is None:
+            return {"csv": [], "pssession": []}
+        selected = set(files_to_delete)
+        return {
+            kind: [name for name in current.get(kind, []) if name not in selected]
+            for kind in ALLOWED_EXTENSIONS
+        }
+
+    update_json(path, remove, {"csv": [], "pssession": []})
+
+
+@app.route("/post_exp/delete-multiple", methods=["POST"])
+def delete_multiple_files():
+    _delete_uploaded(UPLOADED_FILES_PATH, request.form.getlist("delete_files"))
+    return redirect(url_for("upload"))
+
+
+@app.route("/post_exp/delete-all", methods=["POST"])
+def delete_all_files():
+    _delete_uploaded(UPLOADED_FILES_PATH)
+    return redirect(url_for("upload"))
+
+
+@app.route("/real_time/delete-multiple", methods=["POST"])
+def delete_realtime_files():
+    _delete_uploaded(UPLOADED_FOLDER_PATH, request.form.getlist("delete_files"))
+    return redirect(url_for("real_time"))
+
+
+@app.route("/real_time/delete-all", methods=["POST"])
+def delete_all_realtime_files():
+    _delete_uploaded(UPLOADED_FOLDER_PATH)
+    return redirect(url_for("real_time"))
+
+
+def _number_list(value: Any) -> list[float]:
+    if not isinstance(value, list):
+        return []
+    converted: list[float] = []
+    for item in value:
+        try:
+            number = float(item)
+        except (TypeError, ValueError):
+            return []
+        if not math.isfinite(number):
+            return []
+        converted.append(number)
+    return converted
+
+
+def _curve_arrays(curve_data: dict[str, Any]) -> tuple[list[float], list[float], list[float]]:
+    potential = _number_list(curve_data.get("Raw Poetntial "))
+    current = _number_list(curve_data.get("Raw Current"))
+    baseline = _number_list(curve_data.get("Baseline Mean "))
+    if not potential or len(potential) != len(current):
+        return [], [], []
+    if len(baseline) != len(current):
+        baseline = []
+    return potential, current, baseline
+
+
+def _baseline_half_width(curve_data: dict[str, Any], length: int) -> tuple[list[float], str]:
+    values = _number_list(curve_data.get(BASELINE_CI_99_KEY))
+    label = "99% CI"
+    if len(values) != length:
+        values = _number_list(curve_data.get(BASELINE_CI_95_KEY))
+        label = "95% CI (legacy)"
+    if len(values) != length:
+        values = [0.0] * length
+    return [abs(value) for value in values], label
+
+
+def build_graph(file_name: str, curve_no: str, curve_data: dict[str, Any]) -> tuple[go.Figure, list[float]]:
+    potential, current, baseline = _curve_arrays(curve_data)
+    if not potential:
+        raise ValueError(f"{file_name} / {curve_no} has invalid raw arrays.")
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(x=potential, y=current, mode="lines", name="Raw Data", line={"color": "red"})
+    )
+    peak_curve: list[float] = []
+    if baseline:
+        half_width, ci_label = _baseline_half_width(curve_data, len(baseline))
+        baseline_lower = [mean - width for mean, width in zip(baseline, half_width)]
+        baseline_upper = [mean + width for mean, width in zip(baseline, half_width)]
+        peak_curve = [raw - mean for raw, mean in zip(current, baseline)]
+        peak_lower = [value - width for value, width in zip(peak_curve, half_width)]
+        peak_upper = [value + width for value, width in zip(peak_curve, half_width)]
+
+        fig.add_trace(
+            go.Scatter(x=potential, y=baseline, mode="lines", name="Baseline", line={"color": "blue"})
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=potential,
+                y=baseline_lower,
+                mode="lines",
+                line={"color": "rgba(0,0,0,0)"},
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=potential,
+                y=baseline_upper,
+                fill="tonexty",
+                mode="lines",
+                name=f"{ci_label} (Baseline)",
+                fillcolor="rgba(0,0,255,0.1)",
+                line={"color": "rgba(0,0,0,0)"},
+                hoverinfo="skip",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(x=potential, y=peak_curve, mode="lines", name="Peak Curve", line={"color": "green"})
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=potential,
+                y=peak_lower,
+                mode="lines",
+                line={"color": "rgba(0,0,0,0)"},
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=potential,
+                y=peak_upper,
+                fill="tonexty",
+                mode="lines",
+                name=f"{ci_label} (Peak Curve)",
+                fillcolor="rgba(0,255,0,0.2)",
+                line={"color": "rgba(0,0,0,0)"},
+                hoverinfo="skip",
+            )
+        )
+
+    for change_point in _number_list(curve_data.get("Change Point Values ")):
+        fig.add_vline(x=change_point, line={"color": "red", "width": 1})
+
+    peak_value = curve_data.get("Peak Value ", 0)
+    peak_location = curve_data.get("Peak Location: ")
+    try:
+        if float(peak_value) != 0 and peak_location is not None:
+            fig.add_trace(
+                go.Scatter(
+                    x=[float(peak_location)],
+                    y=[float(peak_value)],
+                    mode="markers+text",
+                    text=[f"{float(peak_value):.2f}"],
+                    textposition="top center",
+                    name="Peak",
+                    marker={"color": "green", "size": 10},
+                )
+            )
+    except (TypeError, ValueError):
         pass
 
-    return render_template('real_time.html', files=files)
+    fig.update_layout(
+        title=f"{file_name} - {curve_no}",
+        xaxis_title="Potential (V)",
+        yaxis_title="Current (µA)",
+        margin={"l": 20, "r": 20, "t": 40, "b": 20},
+    )
+    return fig, peak_curve
 
-@app.route('/launch_folder_gui', methods=['GET', 'POST'])
-def launch_folder_gui():
-    logging.debug("Launching GUI...")
-    subprocess.Popen([sys.executable, 'folder_upload.py'])
-    return jsonify({"status": "GUI launched"})
 
-@app.route('/post_exp', methods=['GET', 'POST'])
-def post_exp():
-    return render_template('post_exp.html')
-
-@app.route('/launch_file_gui', methods=['POST'])
-def launch_file_gui():
-    logging.debug("Launching GUI...")
-    subprocess.Popen([sys.executable, 'file_upload.py'])
-    return jsonify({"status": "GUI launched"})
-
-@app.route('/post_exp/upload', methods=['GET', 'POST'])
-def upload():
-    uploaded_files = read_json(UPLOADED_FILES_PATH) or {"csv": []}
-    return render_template('upload.html', files=uploaded_files)
-
-def is_json_files_empty(file_path):
-    # Check if the file exists and is not empty
-    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
-        with open(file_path, 'r') as file:
-            try:
-                data = json.load(file)
-                # Check if the JSON data is empty
-                if not data:  # This checks for {}, [], or None
-                    return True
-                return False
-            except json.JSONDecodeError:
-                # Handle case where file contents are invalid JSON
-                return True
-    else:
-        # File does not exist or is empty
-        return True
-    
-@app.route('/post_exp/upload/data', methods=['POST'])
-def analyze():
-    # Get JSON payload from the request
-    print(request)
-    data = request.get_json()
-    print(data)
-
-    # Extract parameters from the payload
-    SR_weight = float(data.get('successWeight', 0.5))  # Default to 0.5 if not provided
-    noise_level = int(data.get('noiseLevel', 2))  # Default to 3 if not provided
-    Threshold = float(data.get('Threshold', 0.65))
-    print(SR_weight, noise_level, Threshold)  # Debugging statement
-
-    # Prepare the dictionary to save
-    parameters = {
-        "successWeight": SR_weight,
-        "noiseLevel": noise_level,
-        "Threshold": Threshold
-    }
-    print("Parameters to save:", parameters)  # Debugging statement
-
-    # Save parameters to parameters.json
-    with open('database/parameters.json', 'w', encoding='utf-8') as file:
-        json.dump(parameters, file, indent=4)
-
-    uploaded = read_json(UPLOADED_FILES_PATH)
-
-    data_fromGUI = {
-        'csv':      {'file_names': uploaded.get('csv', [])},
-        'pssession':{'file_names': uploaded.get('pssession', [])}
-    }
-
-    with open('Algorithm Setting.json', 'r', encoding='utf-8') as file:
-        data_algs = json.load(file)
-    name = str(int(SR_weight / 0.01))
-    
-    # Run the data analysis function
-    # demo_noPssession.data_analysis(data_fromGUI)
-    
-    
-    start_time = datetime.now()
-    demo.data_analysis(data_fromGUI,
-                data_algs[name][ "CPD Search Model"],
-                data_algs[name][ "CPD Cost Function"],
-                Threshold,
-                noise_level,
-                list(ast.literal_eval(data_algs[name][ "Baseline Fitting Algorithms"]) ))
-    print('Time spent: ',datetime.now()- start_time )
-    pass_data = {}
-    fail_data = {}
-    demo_data = read_json(DEMO_JSON_PATH)
-    for fname, curves in demo_data.items():
-        for cno, cd in curves.items():
-            if cd.get('Peak Value ', 0) == 0:
-                fail_data.setdefault(fname, {})[cno] = cd
-            else:
-                pass_data.setdefault(fname, {})[cno] = cd
-
-    write_json(PASS_GRAPHS_PATH, pass_data)
-    write_json(FAIL_GRAPHS_PATH, fail_data)
-
-    # Return a JSON response indicating success
-    return jsonify({"status": "success", "message": "Data analysis complete"}), 200
-
-@app.route('/post_exp/delete-multiple', methods=['POST'])
-def delete_multiple_files():
+def draw_graph(file_name: str, curve_no: str, curve_data: dict[str, Any]):
     try:
-        files_to_delete = request.form.getlist('delete_files')
-        uploaded_files = read_json(UPLOADED_FILES_PATH)
-        for file_type in uploaded_files:
-            uploaded_files[file_type] = [f for f in uploaded_files[file_type] if f not in files_to_delete]
-        write_json(UPLOADED_FILES_PATH, uploaded_files)
-        return redirect(url_for('upload'))
-    except Exception as e:
-        logging.error(f"Error deleting files: {e}")
-        return jsonify({"error": "Failed to delete files"}), 500
-
-@app.route('/post_exp/delete-all', methods=['POST'])
-def delete_all_files():
-    try:
-        write_json(UPLOADED_FILES_PATH, {"csv": [], "pssession": []})
-        return redirect(url_for('upload'))
-    except Exception as e:
-        logging.error(f"Error deleting all files: {e}")
-        return jsonify({"error": "Failed to delete files"}), 500
-
-def draw_graph(file_name, curve_no, curve_data):
-    """Generate a Plotly figure for a curve."""
-    try:
-        fig = go.Figure()
-        raw_potential = curve_data.get('Raw Poetntial ')
-        raw_current = curve_data.get('Raw Current')
-        cp_indexes = curve_data.get('Change Point Indexes ')
-        cp_values = curve_data.get('Change Point Values ')
-
-        if isinstance(raw_potential, list) and isinstance(raw_current, list):
-            fig.add_trace(go.Scatter(x=raw_potential, y=raw_current, mode='lines', name='Raw Data', line=dict(color='red')))
-        else:
-            logging.warning(f"Invalid data format for {curve_no} in {file_name}")
-            return None, [], [], [], []
-
-        if 'Baseline Mean ' in curve_data:
-            baseline_mean = curve_data['Baseline Mean ']
-            if isinstance(baseline_mean, list):
-                fig.add_trace(go.Scatter(x=raw_potential, y=baseline_mean, mode='lines', name='Baseline', line=dict(color='blue')))
-                ci_lower = curve_data.get('95\\% Confidence Interval of Baseline: ', [])
-                ci_upper = ci_lower
-                if isinstance(ci_lower, list) and isinstance(ci_upper, list):
-                    fig.add_trace(go.Scatter(x=raw_potential, y=ci_lower, mode='lines', line=dict(color='rgba(0,0,0,0)'), showlegend=False))
-                    fig.add_trace(go.Scatter(x=raw_potential, y=ci_upper, fill='tonexty', mode='none', name='95% CI (Baseline)', fillcolor='rgba(0,0,255,0.1)', line=dict(color='rgba(0,0,0,0)')))
-        
-        if 'Change Point Indexes ' in curve_data and isinstance(cp_indexes, list) and isinstance(cp_values, list):
-            for cp in cp_values:
-                fig.add_vline(x=cp, line=dict(color='red', width=2), annotation_text=str(cp), annotation_position='top right', name=f'Change Point at {cp}')
-
-        peak_array = []
-        ci_lower_peak = []
-        ci_upper_peak = []
-        if isinstance(raw_current, list) and isinstance(baseline_mean, list):
-            for i in range(len(raw_potential)):
-                peak_array.append(raw_current[i] - baseline_mean[i])
-                ci_lower_peak.append(raw_current[i] - curve_data.get('95\\% Confidence Interval of Baseline: ', [0])[i])
-                ci_upper_peak.append(raw_current[i] - curve_data.get('95\\% Confidence Interval of Baseline: ', [0])[i])
-            fig.add_trace(go.Scatter(x=raw_potential, y=peak_array, mode='lines', name='Peak Curve', line=dict(color='green')))
-            fig.add_trace(go.Scatter(x=raw_potential, y=ci_lower_peak, mode='lines', line=dict(color='rgba(0,0,0,0)'), showlegend=False))
-            fig.add_trace(go.Scatter(x=raw_potential, y=ci_upper_peak, fill='tonexty', mode='none', name='95% CI (Peak)', fillcolor='rgba(0,255,0,0.2)', line=dict(color='rgba(0,0,0,0)')))
-
-        if 'Peak Value ' in curve_data:
-            peak_value = curve_data['Peak Value ']
-            peak_location = curve_data['Peak Location: ']
-            if not isinstance(peak_value, list):
-                peak_value = [peak_value]
-            if not isinstance(peak_location, list):
-                peak_location = [peak_location]
-            if isinstance(peak_value, list) and isinstance(peak_location, list):
-                fig.add_trace(go.Scatter(x=peak_location, y=peak_value, mode='markers', name='Peak', marker=dict(color='green', size=10)))
-                for loc, val in zip(peak_location, peak_value):
-                    fig.add_annotation(x=loc, y=val, text=f'{val:.2f}', showarrow=True, arrowhead=2, ax=0, ay=-20)
-
-        fig.update_layout(title=f"{file_name} - {curve_no}", xaxis_title='Potential(V)', yaxis_title='Current(uA)', margin=dict(l=20, r=20, t=30, b=20))
-        return fig.to_html(full_html=False), raw_potential, peak_array, ci_lower_peak, ci_upper_peak
-    except Exception as e:
-        logging.error(f"Error processing curve {curve_no} in {file_name}: {e}")
+        fig, peak_curve = build_graph(file_name, curve_no, curve_data)
+        potential, _, _ = _curve_arrays(curve_data)
+        half_width, _ = _baseline_half_width(curve_data, len(peak_curve))
+        lower = [value - width for value, width in zip(peak_curve, half_width)]
+        upper = [value + width for value, width in zip(peak_curve, half_width)]
+        return (
+            fig.to_html(full_html=False, include_plotlyjs=False),
+            potential,
+            peak_curve,
+            lower,
+            upper,
+        )
+    except (TypeError, ValueError) as exc:
+        logging.warning("Skipping graph %s / %s: %s", file_name, curve_no, exc)
         return None, [], [], [], []
 
-@app.route('/post_exp/pass', methods=['GET', 'POST'])
+
+def draw_fail_graph(file_name: str, curve_no: str, curve_data: dict[str, Any]):
+    result = draw_graph(file_name, curve_no, curve_data)
+    return result[0]
+
+
+def _graph_summary(
+    file_name: str, curve_no: str, curve_data: dict[str, Any]
+) -> dict[str, Any] | None:
+    potential, current, baseline = _curve_arrays(curve_data)
+    if not potential:
+        return None
+    peak_curve = [raw - mean for raw, mean in zip(current, baseline)] if baseline else []
+    concentration = curve_data.get("Concentration", curve_data.get("Concentration "))
+    return {
+        "file_name": file_name,
+        "curve_no": curve_no,
+        "peak_height": max(peak_curve) if peak_curve else 0,
+        "frequency": curve_data.get("Frequence ", 0),
+        "concentration": concentration,
+        "_curve_data": curve_data,
+    }
+
+
+def _status_graphs(status: str) -> list[dict[str, Any]]:
+    graphs: list[dict[str, Any]] = []
+    for file_name, curves in load_results().items():
+        if not isinstance(curves, dict):
+            continue
+        for curve_no, curve_data in curves.items():
+            if not isinstance(curve_data, dict):
+                continue
+            if _normalise_status(
+                curve_data.get(REVIEW_STATUS_KEY), curve_data.get("Peak Value ", 0)
+            ) != status:
+                continue
+            graph = _graph_summary(file_name, curve_no, curve_data)
+            if graph:
+                graphs.append(graph)
+    return graphs
+
+
+def _render_graphs(summaries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rendered: list[dict[str, Any]] = []
+    for summary in summaries:
+        graph_html, _, _, lower, upper = draw_graph(
+            summary["file_name"], summary["curve_no"], summary["_curve_data"]
+        )
+        if graph_html is None:
+            continue
+        graph = {key: value for key, value in summary.items() if key != "_curve_data"}
+        graph.update({"html": graph_html, "ci_lower_peak": lower, "ci_upper_peak": upper})
+        rendered.append(graph)
+    return rendered
+
+
+def _safe_filter_number(filter_data: Any, key: str) -> float:
+    try:
+        value = float(filter_data[key])
+    except (TypeError, ValueError, KeyError) as exc:
+        raise ValueError("Filter ranges must contain numeric min and max values.") from exc
+    if not math.isfinite(value):
+        raise ValueError("Filter values must be finite.")
+    return value
+
+
+def _apply_graph_filters(graphs: list[dict[str, Any]], filters: dict[str, Any]) -> list[dict[str, Any]]:
+    mapping = {
+        "peakHeight": "peak_height",
+        "frequency": "frequency",
+        "concentration": "concentration",
+    }
+    filtered = graphs
+    for filter_name, graph_key in mapping.items():
+        selection = filters.get(filter_name)
+        if not selection:
+            continue
+        low = _safe_filter_number(selection, "min")
+        high = _safe_filter_number(selection, "max")
+        if low > high:
+            raise ValueError("A filter minimum cannot be greater than its maximum.")
+        next_graphs = []
+        for graph in filtered:
+            try:
+                value = float(graph[graph_key])
+            except (TypeError, ValueError):
+                continue
+            if low <= value <= high:
+                next_graphs.append(graph)
+        filtered = next_graphs
+    return filtered
+
+
+def _paginate(items: list[Any], page: int) -> tuple[list[Any], int, int, int, int]:
+    total = len(items)
+    total_pages = max(1, math.ceil(total / PAGE_SIZE))
+    page = min(max(page, 1), total_pages)
+    start = (page - 1) * PAGE_SIZE
+    end = min(start + PAGE_SIZE, total)
+    current_start = start + 1 if total else 0
+    return items[start:end], page, total_pages, current_start, end
+
+
+@app.route("/post_exp/pass", methods=["GET", "POST"])
 def pass_graphs():
     try:
-        demo_data = read_json(DEMO_JSON_PATH)
-        graphs = []
-        page = int(request.args.get('page', 1))
-        per_page = 15
+        graphs = _status_graphs("pass")
+        filters = _json_object() if request.method == "POST" else {}
+        graphs = _apply_graph_filters(graphs, filters)
+        raw_page = filters.get("page", request.args.get("page", 1))
+        try:
+            page = int(raw_page)
+        except (TypeError, ValueError):
+            raise ValueError("page must be an integer.")
+        summaries, page, total_pages, current_start, current_end = _paginate(graphs, page)
+        current = _render_graphs(summaries)
+        response_data = {
+            "graphs": current,
+            "page": page,
+            "total_pages": total_pages,
+            "total_graphs": len(graphs),
+            "current_start": current_start,
+            "current_end": current_end,
+        }
+        if request.method == "POST":
+            return jsonify(response_data)
 
-        for file_name, data in demo_data.items():
-            for curve_no, curve_data in data.items():
-                result = draw_graph(file_name, curve_no, curve_data)
-                if result:
-                    graph_html, raw_potential, peak_array, ci_lower_peak, ci_upper_peak = result
-                    peak_height = max(peak_array) if peak_array else 0
-                    graphs.append({
-                        'html': graph_html,
-                        'raw_potential': raw_potential,
-                        'ci_lower_peak': ci_lower_peak,
-                        'ci_upper_peak': ci_upper_peak,
-                        'file_name': file_name,
-                        'curve_no': curve_no,
-                        'peak_height': peak_height,
-                        'frequency': curve_data.get('Frequence ', 0),
-                        'concentration': curve_data.get('Concentration ', None)
-                    })
-
-        if request.method == 'POST':
-            filters = request.json
-            filtered_graphs = [
-                g for g in graphs
-                if (not filters.get('peakHeight') or (filters['peakHeight']['min'] <= g['peak_height'] <= filters['peakHeight']['max'])) and
-                   (not filters.get('frequency') or (filters['frequency']['min'] <= g['frequency'] <= filters['frequency']['max'])) and
-                   (not filters.get('concentration') or (g['concentration'] is not None and filters['concentration']['min'] <= g['concentration'] <= filters['concentration']['max']))
-            ]
-            filtered_graphs = list({g['file_name'] + g['curve_no']: g for g in filtered_graphs}.values())
-            total_graphs = len(filtered_graphs)
-            total_pages = (total_graphs + per_page - 1) // per_page
-            start_index = (filters.get('page', 1) - 1) * per_page
-            end_index = start_index + per_page
-            paginated_graphs = filtered_graphs[start_index:end_index]
-            return jsonify({
-                "graphs": paginated_graphs,
-                "current_start": start_index + 1,
-                "current_end": min(end_index, total_graphs),
-                "total_graphs": total_graphs,
-                "page": filters.get('page', 1),
-                "total_pages": total_pages
-            })
-
-        concentration_missing = any(graph['concentration'] is None for graph in graphs)
-        total_graphs = len(graphs)
-        total_pages = (total_graphs + per_page - 1) // per_page
-        start_index = (page - 1) * per_page
-        end_index = start_index + per_page
-        current_graphs = graphs[start_index:end_index]
-
+        concentrations = [graph["concentration"] for graph in graphs]
+        numeric_concentrations = []
+        for value in concentrations:
+            try:
+                numeric_concentrations.append(float(value))
+            except (TypeError, ValueError):
+                pass
         return render_template(
-            'pass.html',
-            graphs=current_graphs,
+            "pass.html",
+            **response_data,
+            per_page=PAGE_SIZE,
+            concentration_missing=len(numeric_concentrations) != len(graphs),
+            min_concentration=min(numeric_concentrations) if numeric_concentrations else None,
+            max_concentration=max(numeric_concentrations) if numeric_concentrations else None,
+            plotly_js=get_plotlyjs(),
+        )
+    except (ValueError, StorageError) as exc:
+        return jsonify(error=str(exc)), 400
+
+
+@app.route("/post_exp/fail")
+def fail_graphs():
+    try:
+        graphs = _status_graphs("fail")
+        try:
+            requested_page = int(request.args.get("page", 1))
+        except (TypeError, ValueError):
+            raise ValueError("page must be an integer.")
+        summaries, page, total_pages, current_start, current_end = _paginate(
+            graphs, requested_page
+        )
+        current = _render_graphs(summaries)
+        return render_template(
+            "fail.html",
+            graphs=current,
             page=page,
             total_pages=total_pages,
-            per_page=per_page,
-            total_graphs=total_graphs,
-            current_start=start_index + 1,
-            current_end=min(end_index, total_graphs),
-            concentration_missing=concentration_missing
+            total_graphs=len(graphs),
+            current_start=current_start,
+            current_end=current_end,
+            plotly_js=get_plotlyjs(),
         )
-    except Exception as e:
-        logging.error(f"Error in pass_graphs: {e}")
-        return jsonify({"error": "Failed to process request"}), 500
+    except (ValueError, StorageError) as exc:
+        return jsonify(error=str(exc)), 400
 
-def draw_fail_graph(file_name, curve_no, curve_data):
-    peak_value = curve_data.get('Peak Value ', 0)  # Default to 0 if not found
 
-    if peak_value != 0:
-        # Call draw_graph for a complete graph if Peak Value is not zero
-        return draw_graph(file_name, curve_no, curve_data)[0]
-    
-    fig = go.Figure()
-    try:
-        raw_potential = curve_data.get('Raw Poetntial ')
-        raw_current = curve_data.get('Raw Current')
+def _graph_references(payload: dict[str, Any]) -> list[tuple[str, str]]:
+    raw_graphs = payload.get("graphs")
+    if not isinstance(raw_graphs, list) or not raw_graphs:
+        raise ValueError("Select at least one graph.")
+    references: list[tuple[str, str]] = []
+    for raw in raw_graphs:
+        if not isinstance(raw, dict):
+            raise ValueError("Each graph reference must contain file_name and curve_no.")
+        file_name = raw.get("file_name")
+        curve_no = raw.get("curve_no")
+        if not isinstance(file_name, str) or not isinstance(curve_no, str):
+            raise ValueError("Each graph reference must contain file_name and curve_no.")
+        references.append((file_name, curve_no))
+    return references
 
-        # Plot raw data
-        if isinstance(raw_potential, list) and isinstance(raw_current, list):
-            fig.add_trace(go.Scatter(x=raw_potential, y=raw_current, mode='lines', name='Raw Data', line=dict(color=PALETTE[0])))
-        else:
-            print(f"Invalid data format for curve {curve_no} in file {file_name}.")
-            return None
 
-        fig.update_layout(
-            title=f"{file_name} - {curve_no} (Failed Graph)",
-            xaxis_title='Potential(V)',
-            yaxis_title='Current(µA)',
-            margin=dict(l=20, r=20, t=30, b=20)
-        )
-        return fig.to_html(full_html=False)
+def _set_review_status(references: list[tuple[str, str]], status: str) -> int:
+    changed = 0
 
-    except Exception as e:
-        print(f"Error drawing failed graph for {curve_no} in {file_name}: {e}")
-        return None
-    
-@app.route('/post_exp/fail')
-def fail_graphs():
-    fail_data = read_json(FAIL_GRAPHS_PATH)
-    graphs = []
+    def apply(results: Any) -> dict[str, Any]:
+        nonlocal changed
+        if not isinstance(results, dict):
+            raise StorageError("results.json must contain a JSON object.")
+        for file_name, curve_no in references:
+            curve = results.get(file_name, {}).get(curve_no)
+            if not isinstance(curve, dict):
+                raise ValueError(f"Unknown graph: {file_name} / {curve_no}")
+            if curve.get(REVIEW_STATUS_KEY) != status:
+                curve[REVIEW_STATUS_KEY] = status
+                changed += 1
+        return results
 
-    for file_name, curves in fail_data.items():
-        for curve_no, curve_data in curves.items():
-            graph_html = draw_fail_graph(file_name, curve_no, curve_data)
-            if graph_html:
-                graphs.append({
-                    'html': graph_html,
-                    'file_name': file_name,
-                    'curve_no': curve_no
-                })
+    update_json(RESULTS_PATH, apply, {})
+    return changed
 
-    return render_template('fail.html', graphs=graphs)
 
-@app.route('/post_exp/delete_graphs', methods=['POST'])
+@app.route("/post_exp/delete_graphs", methods=["POST"])
 def delete_graphs():
-    # global deleted_graphs
-    selected_graphs = request.json['graphs']
-    demo_data = read_json(DEMO_JSON_PATH)
-    fail_data = read_json(FAIL_GRAPHS_PATH)
-    
-    for graph_id in selected_graphs:
-        if '_Curve No. ' in graph_id:
-            file_name, curve_no_suffix = graph_id.rsplit('_Curve No. ', 1)
-            file_name = file_name.strip()
-            curve_no  = 'Curve No. ' + curve_no_suffix.strip()
-        else:
-            continue
-        if file_name in demo_data and curve_no in demo_data[file_name]:
-            curve_data = demo_data[file_name][curve_no]
+    if not _analysis_lock.acquire(blocking=False):
+        return jsonify(error="An analysis is already running."), 409
+    try:
+        references = _graph_references(_json_object())
+        changed = _set_review_status(references, "fail")
+        return jsonify(success=True, updated=changed)
+    except (ValueError, StorageError) as exc:
+        return jsonify(error=str(exc)), 400
+    finally:
+        _analysis_lock.release()
 
-            # Add to fail_graphs.json
-            if file_name not in fail_data:
-                fail_data[file_name] = {}
-            fail_data[file_name][curve_no] = curve_data
 
-            # Remove from results.json
-            del demo_data[file_name][curve_no]
-            if not demo_data[file_name]:
-                del demo_data[file_name]
+@app.route("/post_exp/restore_graphs", methods=["POST"])
+def restore_graphs():
+    if not _analysis_lock.acquire(blocking=False):
+        return jsonify(error="An analysis is already running."), 409
+    try:
+        references = _graph_references(_json_object())
+        changed = _set_review_status(references, "pass")
+        return jsonify(success=True, updated=changed)
+    except (ValueError, StorageError) as exc:
+        return jsonify(error=str(exc)), 400
+    finally:
+        _analysis_lock.release()
 
-    write_json(DEMO_JSON_PATH, demo_data)
-    write_json(FAIL_GRAPHS_PATH, fail_data)
 
-    return jsonify(success=True)
-
-@app.route('/post_exp/restore_graphs', methods=['POST'])
-def restore_graphs(): #check falled 
-    global deleted_graphs
-    selected_graphs = request.json['graphs']  # List of selected graphs
-    restored_graphs_data = []  # To track successfully restored graphs
-
-    demo_data = read_json(DEMO_JSON_PATH)
-    fail_data = read_json(FAIL_GRAPHS_PATH)
-    pass_data = read_json(PASS_GRAPHS_PATH)
-
-    for graph_id in selected_graphs:
-        file_name, curve_no = graph_id.split('_', 1)
-        if file_name in fail_data and curve_no in fail_data[file_name]:
-            curve_data = fail_data[file_name][curve_no]
-
-            # Check and reprocess the graph
-            peak_value = curve_data.get('Peak Value ', 0)
-            if peak_value == 0:
-                # Use a different color to signal the rerun
-                graph_html = draw_fail_graph(file_name, curve_no, curve_data)
-            else:
-                # Use the regular draw_graph function
-                graph_html, raw_potential, peak_array, ci_lower_peak, ci_upper_peak = draw_graph(file_name, curve_no, curve_data)
-
-                # Move to pass_data if peak_value is valid
-                if file_name not in pass_data:
-                    pass_data[file_name] = {}
-                pass_data[file_name][curve_no] = curve_data
-
-                # Remove from fail_data
-                del fail_data[file_name][curve_no]
-                if not fail_data[file_name]:  # Remove empty entries
-                    del fail_data[file_name]
-
-                restored_graphs_data.append({
-                    'file_name': file_name,
-                    'curve_no': curve_no,
-                    'html': graph_html,
-                })
-
-    # Save updated JSON files
-    write_json(PASS_GRAPHS_PATH, pass_data)
-    write_json(FAIL_GRAPHS_PATH, fail_data)
-
-    return jsonify(success=True, restored_graphs=restored_graphs_data)
-
-# Route for overlaying selected graphs
-@app.route('/post_exp/overlay_graphs', methods=['POST'])
+@app.route("/post_exp/overlay_graphs", methods=["POST"])
 def overlay_graphs():
-    print('request', request.json)
-    selected_graphs = request.json['graphs']
-    print('selected graph', selected_graphs)
-
-    demo_data = read_json(DEMO_JSON_PATH)
-    # print('demo_data', demo_data)
-    # print('json_dataset', json_dataset)
-
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    for graph_id in selected_graphs:
-        if graph_id != 'on':
-            try:
-                # Split the graph_id to extract file_name and curve_no
-                if '_Curve No.' in graph_id:
-                    file_name, curve_no = graph_id.rsplit('_Curve No. ', 1)
-                    curve_no = 'Curve No. ' + curve_no.strip()
-                    file_name = file_name.strip()
-                else:
-                    print(f"Unexpected format for graph_id: {graph_id}")
-                    continue
-
-                # Fetch curve_data safely
-                print('file_name', file_name, 'curve_no', curve_no)
-                if file_name in demo_data and curve_no in demo_data[file_name]:
-                    curve_data = demo_data[file_name][curve_no]
-                else:
-                    print(f"KeyError: Missing data for file {file_name} and curve {curve_no}")
-                    continue
-
-                # Process curve_data
-                _, raw_potential, peak_array, ci_lower_peak, ci_upper_peak = draw_graph(file_name, curve_no, curve_data)
-                fig.add_trace(go.Scatter(x=raw_potential, y=peak_array, mode='lines', 
-                                        name=f'{file_name} {curve_no}', line=dict(width=1.5)), secondary_y=False)
-            except KeyError as e:
-                print(f"KeyError: {e} for file {file_name} and curve {curve_no}")
-
-    fig.update_layout(
-        title="Overlayed Peak Curves",
-        xaxis_title='Potential(V)',
-        yaxis_title='Current(uA)',
-        margin=dict(l=50, r=50, t=50, b=50),  # Increase margins for better spacing
-        legend=dict(
-            x=0,
-            y=-0.2,
-            orientation="h"  # Place legend horizontally below the graph
+    try:
+        references = _graph_references(_json_object())
+        results = load_results()
+        fig = make_subplots()
+        for file_name, curve_no in references:
+            curve = results.get(file_name, {}).get(curve_no)
+            if not isinstance(curve, dict):
+                raise ValueError(f"Unknown graph: {file_name} / {curve_no}")
+            potential, current, baseline = _curve_arrays(curve)
+            if not baseline:
+                continue
+            peak_curve = [raw - mean for raw, mean in zip(current, baseline)]
+            fig.add_trace(
+                go.Scatter(
+                    x=potential,
+                    y=peak_curve,
+                    mode="lines",
+                    name=f"{file_name} {curve_no}",
+                )
+            )
+        if not fig.data:
+            raise ValueError("The selected graphs do not contain baseline data.")
+        fig.update_layout(
+            title="Overlaid Peak Curves",
+            xaxis_title="Potential (V)",
+            yaxis_title="Current (µA)",
+            margin={"l": 50, "r": 50, "t": 50, "b": 80},
+            legend={"x": 0, "y": -0.2, "orientation": "h"},
         )
-    )
-    graph_json = fig.to_json()
-    return jsonify(graph_json)
+        return jsonify(figure=json.loads(pio.to_json(fig)))
+    except (ValueError, StorageError) as exc:
+        return jsonify(error=str(exc)), 400
 
-# Route for updating graphs with user-defined ranges
-@app.route('/post_exp/update_graphs', methods=['POST', 'GET'])
+
+def _curve_index(curve_no: str) -> int:
+    prefix = "Curve No. "
+    if not curve_no.startswith(prefix):
+        raise ValueError(f"Invalid curve number: {curve_no}")
+    try:
+        index = int(curve_no[len(prefix) :]) - 1
+    except ValueError as exc:
+        raise ValueError(f"Invalid curve number: {curve_no}") from exc
+    if index < 0:
+        raise ValueError(f"Invalid curve number: {curve_no}")
+    return index
+
+
+@app.route("/post_exp/update_graphs", methods=["POST"])
 def update_graphs():
-    selected_graphs = request.json['graphs']
-    print("Selected graphs for update:", selected_graphs)
+    if not _analysis_lock.acquire(blocking=False):
+        return jsonify(error="An analysis is already running."), 409
+    try:
+        with _realtime_lock:
+            if _realtime_process is not None and _realtime_process.poll() is None:
+                return jsonify(error="Real-time analysis is already running."), 409
+        payload = _json_object()
+        references = _graph_references(payload)
+        left = _finite_number(payload, "left_val", float("nan"))
+        right = _finite_number(payload, "right_val", float("nan"))
+        if left >= right:
+            raise ValueError("left_val must be less than right_val.")
 
-    file_name = ""
-    curve_no = 0
-    for graph_id in selected_graphs:
-        if graph_id != 'on':
-            try:
-                file_name, curve_no = graph_id.split('_Curve No.')
-                curve_no = int(curve_no.strip())-1
-            except ValueError:
-                print(f"Invalid graph_id format: {graph_id}")
-                return jsonify({"error": f"Invalid graph_id format: {graph_id}"}), 400
-    print('file_name', file_name, 'curve_no', curve_no)
+        parameters = read_json(PARAMETERS_PATH, {})
+        if not isinstance(parameters, dict):
+            raise ValueError("Saved analysis parameters are invalid.")
+        weight, noise, _, _ = _analysis_parameters(parameters)
+        _, fitting = _algorithm_settings(weight)
 
-    left_val = float(request.json['left_val'])
-    # if not left_val:
-    #     return jsonify({"error": "left value is required"}), 400
-    right_val = float(request.json['right_val'])
-    # if not right_val:
-    #     return jsonify({"error": "right value is required"}), 400
-    # print('left', left_val, 'right', right_val)
-
-    params = read_json('database/parameters.json')
-    # Prepare data structure for analysis
-    SR_weight = float(params.get('successWeight', 0.5))  # Default to 0.5 if not provided
-    noise_level = int(params.get('noiseLevel', 2))  # Default to 3 if not provided
-    print(f"SR_weight: {SR_weight}, noise_level: {noise_level}")
-
-    with open('Algorithm Setting.json', 'r', encoding='utf-8') as file:
-        data_algs = json.load(file)
-    
-    name = str(int(SR_weight / 0.01))
-    print(f"Algorithm name: {name}")
-
-    # Run the data analysis function
-    args = (file_name, # file name
-            curve_no, # curve index
-            [left_val, right_val],  # change point value
-            list(ast.literal_eval(data_algs[name][ "Baseline Fitting Algorithms"]) ), # fitting algorithms
-            noise_level) # noise level
-    print(args) 
-    process_file(args)
-    # return jsonify({"message": "Range values updated"}), 200
-
-    demo_data = read_json(DEMO_JSON_PATH)
-
-    pass_data, fail_data = {}, {}
-    for fname, curves in demo_data.items():
-        for cno, cd in curves.items():
-            if cd.get('Peak Value ', 0):
-                pass_data.setdefault(fname, {})[cno] = cd
-            else:
-                fail_data.setdefault(fname, {})[cno] = cd
-    write_json(PASS_GRAPHS_PATH, pass_data)
-    write_json(FAIL_GRAPHS_PATH, fail_data)
-
-    return render_template('fail.html', demo_data=demo_data)
+        working = load_results(persist_migration=False)
+        for file_name, curve_no in references:
+            if curve_no not in working.get(file_name, {}):
+                raise ValueError(f"Unknown graph: {file_name} / {curve_no}")
+            process_file(
+                (
+                    file_name,
+                    _curve_index(curve_no),
+                    [left, right],
+                    fitting,
+                    noise,
+                ),
+                data_result=working,
+                persist=False,
+            )
+        write_json(RESULTS_PATH, working)
+        initialize_data_table(working)
+        return jsonify(success=True, updated=len(references))
+    except (ValueError, KeyError, RuntimeError, StorageError, OSError) as exc:
+        logging.exception("Graph update failed")
+        return jsonify(error=str(exc)), 400
+    finally:
+        _analysis_lock.release()
 
 
-lock = threading.Lock()
-
-@app.route('/post_exp/data-table', methods=['GET', 'POST'])
+@app.route("/post_exp/data-table", methods=["GET", "POST"])
 def data_table():
     try:
-        if request.method == 'POST':
-            updates = request.json
-            if not updates:
-                return jsonify({"error": "Invalid JSON format"}), 400
+        if request.method == "POST":
+            updates = _json_object()
 
-            with lock:
-                data_table = read_json(DATA_TABLE_PATH)
-                for file, curves in updates.items():
-                    if file not in data_table:
-                        data_table[file] = {}
-                    for curve, values in curves.items():
-                        if curve not in data_table[file]:
-                            data_table[file][curve] = {
-                                "Date and time measurement": "",
-                                "Frequence ": "",
-                                "Amplitude ": "",
-                                "Peak Value ": "",
-                                "Channel ": "",
-                                "Concentration": ""
+            def apply(table: Any) -> dict[str, Any]:
+                if not isinstance(table, dict):
+                    table = {}
+                for file_name, curves in updates.items():
+                    if not isinstance(curves, dict):
+                        raise ValueError("Each file update must contain curve updates.")
+                    for curve_no, values in curves.items():
+                        if not isinstance(values, dict):
+                            raise ValueError("Each curve update must be an object.")
+                        row = table.setdefault(file_name, {}).setdefault(curve_no, {})
+                        row.update(
+                            {
+                                "Date and time measurement": values.get(
+                                    "date", row.get("Date and time measurement", "")
+                                ),
+                                "Frequence ": values.get(
+                                    "frequency", row.get("Frequence ", "")
+                                ),
+                                "Amplitude ": values.get(
+                                    "amplitude", row.get("Amplitude ", "")
+                                ),
+                                "Concentration": values.get(
+                                    "concentration", row.get("Concentration", "")
+                                ),
                             }
-                        # ⭐ Update values
-                        data_table[file][curve].update({
-                            "Date and time measurement": values.get("date", data_table[file][curve].get("Date and time measurement", "")),
-                            "Frequence ": values.get("frequency", ""),
-                            "Amplitude ": values.get("amplitude", ""),
-                            "Concentration": values.get("concentration", "")
-                        })
+                        )
+                return table
 
-                write_json(DATA_TABLE_PATH, data_table)
+            update_json(DATA_TABLE_PATH, apply, {})
+            return jsonify(message="Data saved successfully.")
 
-            return jsonify({"message": "Data saved successfully"}), 200
-
-        # GET method: render page
-        json_dataset = read_json(DEMO_JSON_PATH)
-        data_table = read_json(DATA_TABLE_PATH)
-        if not data_table or not any(data_table.values()):
-            data_table = initialize_data_table(json_dataset)
-        return render_template('data_table.html', demo_data=data_table)
-
-    except Exception as e:
-        logging.error(f"Error in data_table: {e}")
-        return render_template('error.html', error_message="Failed to load data table"), 500
-
-
-@app.route('/post_exp/export-table', methods=['GET'])
-def export_table():
-    try:
-        data = read_json(DATA_TABLE_PATH)
-        rows = [
-            {
-                "File Name": file,
-                "Curve No.": curve,
-                "Frequency": values.get("Frequence ", ""),
-                "Amplitude": values.get("Amplitude ", ""),
-                "Concentration": values.get("Concentration", "")
-            }
-            for file, curves in data.items()
-            for curve, values in curves.items()
-        ]
-        df = pd.DataFrame(rows)
-        csv = df.to_csv(index=False)
-        return Response(
-            csv,
-            mimetype="text/csv",
-            headers={"Content-disposition": "attachment; filename=data_table_export.csv"}
+        if _analysis_lock.acquire(blocking=False):
+            try:
+                results = _backfill_missing_peak_widths(load_results())
+                table = initialize_data_table(results)
+            finally:
+                _analysis_lock.release()
+        else:
+            # Do not write either results or the table while a batch is replacing them.
+            table = read_json(DATA_TABLE_PATH, {})
+            if not isinstance(table, dict):
+                table = {}
+        file_display_names = {
+            file_name: display_file_name(file_name) for file_name in table
+        }
+        return render_template(
+            "data_table.html",
+            demo_data=table,
+            file_display_names=file_display_names,
         )
-    except Exception as e:
-        logging.error(f"Error exporting table: {e}")
-        return jsonify({"error": "Failed to export table"}), 500
+    except (ValueError, StorageError) as exc:
+        logging.exception("Data table request failed")
+        return render_template("error.html", error_message=str(exc)), 500
 
-@app.route('/post_exp/3d-graph')
+
+@app.route("/post_exp/export-table")
+def export_table():
+    def csv_safe(value: Any) -> Any:
+        if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
+            return "'" + value
+        return value
+
+    data = read_json(DATA_TABLE_PATH, {})
+    rows = [
+        {
+            "File Name": csv_safe(file_name),
+            "Curve No.": csv_safe(curve_no),
+            "Date and Time": csv_safe(values.get("Date and time measurement", "")),
+            "Frequency": csv_safe(values.get("Frequence ", "")),
+            "Amplitude": csv_safe(values.get("Amplitude ", "")),
+            "Peak Height": csv_safe(values.get("Peak Value ", "")),
+            PEAK_WIDTH_KEY: csv_safe(values.get(PEAK_WIDTH_KEY, "")),
+            PEAK_POTENTIAL_LOCATION_KEY: csv_safe(
+                values.get(PEAK_POTENTIAL_LOCATION_KEY, "")
+            ),
+            "Channel No.": csv_safe(values.get("Channel ", "")),
+            "Concentration": csv_safe(values.get("Concentration", "")),
+        }
+        for file_name, curves in data.items()
+        for curve_no, values in curves.items()
+    ]
+    csv_data = pd.DataFrame(rows).to_csv(index=False)
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=data_table_export.csv"},
+    )
+
+
+@app.route("/post_exp/3d-graph")
 def graph_page():
-    return render_template('3d_graph.html')
+    return render_template("3d_graph.html", plotly_js=get_plotlyjs())
+
+
+def _series(values: list[Any], key: str) -> pd.Series:
+    if key == "Date and time measurement":
+        return pd.to_datetime(values, errors="coerce")
+    return pd.to_numeric(values, errors="coerce")
+
 
 @app.route("/generate-3d-graph", methods=["POST"])
 def generate_3d_graph():
-    # 1) Parse request
-    params      = [p.strip() for p in request.json["params"]]
-    color_param = request.json.get("colorParam")
-    if color_param:
-        color_param = color_param.strip()
+    try:
+        payload = _json_object()
+        raw_params = payload.get("params")
+        if not isinstance(raw_params, list):
+            raise ValueError("params must be a list.")
+        params = [str(value).strip() for value in raw_params]
+        if len(params) not in {2, 3} or len(set(params)) != len(params):
+            raise ValueError("Select two or three distinct parameters.")
+        allowed = {
+            "Frequence",
+            "Amplitude",
+            "Date and time measurement",
+            "Peak Value",
+            "Concentration",
+            "Channel",
+        }
+        if any(parameter not in allowed for parameter in params):
+            raise ValueError("An unsupported graph parameter was selected.")
+        color_key = payload.get("colorParam")
+        if color_key:
+            color_key = str(color_key).strip()
+            if color_key not in params:
+                raise ValueError("colorParam must be one of the selected parameters.")
+        else:
+            color_key = None
 
-    x_key, y_key = params[0], params[1]
-    z_key        = params[2] if len(params) > 2 else None
-    c_key        = color_param
-
-    x_raw, y_raw, z_raw, c_raw = [], [], [], []
-
-    # 2) Collect data
-    dataset = read_json(DATA_TABLE_PATH)
-    for curves in dataset.values():
-        for curve in curves.values():
-            row = {k.strip(): v for k, v in curve.items()}
-            if x_key not in row or y_key not in row or (z_key and z_key not in row):
+        rows: list[dict[str, Any]] = []
+        dataset = read_json(DATA_TABLE_PATH, {})
+        for curves in dataset.values():
+            if not isinstance(curves, dict):
                 continue
-            x_raw.append(row[x_key])
-            y_raw.append(row[y_key])
-            if z_key:
-                z_raw.append(row[z_key])
-            if c_key and c_key in row:
-                c_raw.append(row[c_key])
+            for curve in curves.values():
+                if not isinstance(curve, dict):
+                    continue
+                normalised = {key.strip(): value for key, value in curve.items()}
+                rows.append({key: normalised.get(key) for key in params})
+        if not rows:
+            raise ValueError("The data table does not contain graphable rows.")
 
-    # 3) Convert to proper types
-    def to_series(raw, key):
-        if key == "Date and time measurement":
-            # Try parsing a variety of common formats
-            return pd.to_datetime(
-                raw,
-                infer_datetime_format=True,
-                errors="coerce"  # bad parses become NaT
+        converted = {key: _series([row[key] for row in rows], key) for key in params}
+        frame = pd.DataFrame(converted).dropna(subset=params)
+        if frame.empty:
+            raise ValueError("No rows contain valid values for all selected parameters.")
+
+        if len(params) == 3:
+            figure = px.scatter_3d(
+                frame,
+                x=params[0],
+                y=params[1],
+                z=params[2],
+                color=color_key,
+                title=f"3D Graph of {', '.join(params)}",
             )
         else:
-            # Numeric: coerce non‐numeric to NaN
-            return pd.to_numeric(raw, errors="coerce")
+            figure = px.scatter(
+                frame,
+                x=params[0],
+                y=params[1],
+                color=color_key,
+                title=f"2D Graph of {params[0]} vs {params[1]}",
+            )
+        return jsonify(figure=json.loads(pio.to_json(figure)))
+    except (ValueError, StorageError) as exc:
+        return jsonify(error=str(exc)), 400
 
-    data = {
-        x_key: to_series(x_raw, x_key),
-        y_key: to_series(y_raw, y_key),
-    }
-    if z_key:
-        data[z_key] = to_series(z_raw, z_key)
-    if c_key:
-        data[c_key] = to_series(c_raw, c_key)
 
-    df = pd.DataFrame(data).dropna(subset=[x_key, y_key] + ([z_key] if z_key else []))
-
-    # 4) Plot
-    labels = {x_key: x_key, y_key: y_key}
-    if z_key:
-        labels[z_key] = z_key
-    if c_key:
-        labels[c_key] = c_key
-
-    if z_key:
-        fig = px.scatter_3d(
-            df,
-            x=x_key, y=y_key, z=z_key,
-            color=c_key,
-            labels=labels,
-            title=f"3D Graph of {x_key}, {y_key}, {z_key}"
-        )
-        # If your x/y/z include dates, tell Plotly to treat them as dates:
-        layout_updates = {}
-        if x_key == "Date and time measurement":
-            layout_updates["scene.xaxis"] = dict(type="date")
-        if y_key == "Date and time measurement":
-            layout_updates["scene.yaxis"] = dict(type="date")
-        if z_key == "Date and time measurement":
-            layout_updates["scene.zaxis"] = dict(type="date")
-        if layout_updates:
-            fig.update_layout(**layout_updates)
-
-    else:
-        # 2D scatter — Plotly auto‐detects datetime series
-        fig = px.scatter(
-            df,
-            x=x_key, y=y_key,
-            color=c_key,
-            labels=labels,
-            title=f"2D Graph of {x_key} vs {y_key}"
-        )
-
-    # 5) Return JSON
-    return jsonify(pio.to_json(fig))
-
-@app.route('/download-results')
+@app.route("/download-results")
+@app.route("/exit")
 def download_results():
-    try:
-        if not os.path.exists(DEMO_JSON_PATH):
-            return "No results found.", 404
-        # Generate timestamp for filename
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        download_name = f"apace_results_{timestamp}.json"
-        return send_file(
-            DEMO_JSON_PATH,
-            mimetype='application/json',
-            as_attachment=True,
-            download_name=download_name
-        )
-    except Exception as e:
-        logging.error(f"Error in download_results: {e}")
-        return jsonify({"error": "Failed to download results"}), 500
+    if not RESULTS_PATH.is_file():
+        return "No results found.", 404
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    return send_file(
+        RESULTS_PATH,
+        mimetype="application/json",
+        as_attachment=True,
+        download_name=f"apace_results_{timestamp}.json",
+    )
 
-@app.route('/exit', methods=['GET'])
-def exit():
-    try:
-        if not os.path.exists(DEMO_JSON_PATH):
-            return "No results found.", 404
-        # Generate timestamp for filename
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        download_name = f"apace_results_{timestamp}.json"
-        response = send_file(
-            DEMO_JSON_PATH,
-            mimetype='application/json',
-            as_attachment=True,
-            download_name=download_name
-        )
-        def shutdown_server():
-            func = request.environ.get('werkzeug.server.shutdown')
-            if func is None:
-                logging.warning("Server shutdown not supported in this environment")
-            else:
-                func()
-        threading.Timer(1.0, shutdown_server).start()
-        return response
-    except Exception as e:
-        logging.error(f"Error in exit: {e}")
-        return jsonify({"error": "Failed to exit and download results"}), 500
 
-def clear_json_file():
-    """Clear JSON files on application shutdown."""
-    for path in [UPLOADED_FILES_PATH, UPLOADED_FOLDER_PATH, PASS_GRAPHS_PATH, FAIL_GRAPHS_PATH, DEMO_JSON_PATH, DATA_TABLE_PATH]:
-        write_json(path, {})
-
-atexit.register(clear_json_file)
-
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", debug=False, use_reloader=False, threaded=True)

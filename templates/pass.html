@@ -191,7 +191,9 @@
             cursor: pointer;
         }
     </style>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>window.__apaceAmdDefine = window.define; window.define = undefined;</script>
+    <script>{{ plotly_js|safe }}</script>
+    <script>window.define = window.__apaceAmdDefine; delete window.__apaceAmdDefine;</script>
 </head>
 <body>
     <div class="sidebar">
@@ -201,7 +203,7 @@
         <button class="fail-button" onclick="location.href='/post_exp/fail'">Fail</button>
         <button class="add-info-button" onclick="location.href='/post_exp/data-table'">Data Table</button>
         <button class="graph-button" onclick="location.href='/post_exp/3d-graph'">Graph</button>
-        <button class="exit-button" onclick="handleExit()">Exit</button>
+        <button class="exit-button" onclick="handleExit()">Download Results</button>
     </div>
     
     <div class="form-container">
@@ -261,7 +263,8 @@
                 <div class="graph">
                 <input type="checkbox"
                         class="graph-checkbox"
-                        value="{{ graph.file_name }}_{{ graph.curve_no }}">
+                        data-file-name="{{ graph.file_name|e }}"
+                        data-curve-no="{{ graph.curve_no|e }}">
                 {{ graph.html|safe }}
                 </div>
             {% endfor %}
@@ -303,10 +306,7 @@
     
     <script>
         function handleExit() {
-            if (confirm("Are you sure you want to exit and download results?")) {
-                // Trigger a download
-                window.location.href = "/download-results";
-            }
+            window.location.href = "/download-results";
         }
         function applyFilters(page = 1) {  // Add a page parameter
             const selectedFilters = {};
@@ -368,14 +368,10 @@
                     showFeedbackMessage('No graphs match the selected filters.', 'error');
                 } else {
                     showFeedbackMessage('Graphs filtered successfully!', 'success');
-                    updateGraphs(data);
-
-                    // Update the graph range display
-                    updateGraphRangeDisplay(data.current_start, data.current_end, data.total_graphs);
-
-                    // Update pagination
-                    updatePagination(data.page, data.total_pages);
                 }
+                updateGraphs(data);
+                updateGraphRangeDisplay(data.current_start, data.current_end, data.total_graphs);
+                updatePagination(data.page, data.total_pages);
             })
             .catch(error => {
                 // Hide loading indicator and show error message
@@ -446,10 +442,14 @@
                 graphElement.className = 'graph';
 
                 // Set the inner HTML safely using DOMParser
-                const graphHTML = `
-                    <input type="checkbox" value="${graph.file_name}_${graph.curve_no}">
-                    ${graph.html}
-                `;
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'graph-checkbox';
+                checkbox.dataset.fileName = graph.file_name;
+                checkbox.dataset.curveNo = graph.curve_no;
+                graphElement.appendChild(checkbox);
+
+                const graphHTML = graph.html;
 
                 // Create a temporary element to parse the HTML string
                 const tempDiv = document.createElement('div');
@@ -488,21 +488,25 @@
             // Uncheck all checkboxes and clear input fields
             document.getElementById('peak-height-checkbox').checked = false;
             document.getElementById('frequency-checkbox').checked = false;
-            document.getElementById('concentration-checkbox').checked = false;
+            const concentrationCheckbox = document.getElementById('concentration-checkbox');
+            if (concentrationCheckbox) concentrationCheckbox.checked = false;
 
             document.getElementById('peak-height-min').value = '';
             document.getElementById('peak-height-max').value = '';
             document.getElementById('frequency-min').value = '';
             document.getElementById('frequency-max').value = '';
-            document.getElementById('concentration-min').value = '';
-            document.getElementById('concentration-max').value = '';
+            const concentrationMin = document.getElementById('concentration-min');
+            const concentrationMax = document.getElementById('concentration-max');
+            if (concentrationMin) concentrationMin.value = '';
+            if (concentrationMax) concentrationMax.value = '';
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            document.querySelectorAll('input[id$="-checkbox"]').forEach(checkbox => {
                 checkbox.addEventListener('change', () => {
                     const minInput = document.getElementById(`${checkbox.id.replace('-checkbox', '')}-min`);
                     const maxInput = document.getElementById(`${checkbox.id.replace('-checkbox', '')}-max`);
+                    if (!minInput || !maxInput) return;
                     if (checkbox.checked) {
                         minInput.disabled = false;
                         maxInput.disabled = false;
@@ -514,11 +518,15 @@
             });
         });
 
+        function selectedGraphReferences() {
+            return Array.from(document.querySelectorAll('.graph-checkbox:checked')).map(checkbox => ({
+                file_name: checkbox.dataset.fileName,
+                curve_no: checkbox.dataset.curveNo
+            }));
+        }
+
         function deleteSelectedGraphs() {
-            const selectedGraphs = [];
-            document.querySelectorAll('input[type=checkbox]:checked').forEach(checkbox => {
-                selectedGraphs.push(checkbox.value);
-            });
+            const selectedGraphs = selectedGraphReferences();
             console.log("Selected graphs to delete:", selectedGraphs);
 
             fetch('/post_exp/delete_graphs', {
@@ -537,10 +545,7 @@
         }
 
         function overlaySelectedGraphs() {
-            const selectedGraphs = [];
-            document.querySelectorAll('input[type=checkbox]:checked').forEach(checkbox => {
-                selectedGraphs.push(checkbox.value);
-            });
+            const selectedGraphs = selectedGraphReferences();
             console.log("Selected graphs to overlay:", selectedGraphs);
 
             fetch('/post_exp/overlay_graphs', {
@@ -555,14 +560,13 @@
                     throw new Error('Network response was not ok');
                 }
                 return response.json();
-            }).then(graph_json => {
-                console.log("Overlay graph JSON:", graph_json);
+            }).then(payload => {
                 const overlayContainer = document.getElementById('overlay-container');
                 overlayContainer.innerHTML = ''; // Clear existing content
                 const div = document.createElement('div');
                 div.id = 'overlay-plot';
                 overlayContainer.appendChild(div);
-                const graphData = JSON.parse(graph_json);
+                const graphData = payload.figure;
                 Plotly.newPlot('overlay-plot', graphData.data, graphData.layout, {responsive: true});
                 showModal();
             }).catch(error => {

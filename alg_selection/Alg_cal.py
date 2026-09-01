@@ -330,21 +330,22 @@ def get_algo_instance(Alg, Alg_X, Alg_Data, Alg_Fit_Order, Alg_Num_Iter, Alg_Wei
 
 def cal_baselines(  args ):
     Alg_File_Name, Alg_Data,Fit_Alg = args  #data of file
-    Num_Curves =  len( Alg_Data ) 
+    curve_keys = [key for key in Alg_Data if key.startswith('Curve No. ')]
     Fit_Order = 3
     Num_Iter = 9999
     data_file = {}
-    for i in range( 1):
-        data_file['Curve No. '+str(i+1)] = { }
-        Curve_CP_index = Alg_Data['Curve No. '+str(i+1)][ "Change Point Indexes "]
+    for curve_key in curve_keys:
+        data_file[curve_key] = { }
+        Curve_CP_index = Alg_Data[curve_key][ "Change Point Indexes "]
         #dropout
         if Curve_CP_index[0] == Curve_CP_index[1]:
-            data_file['Curve No. '+str(i+1)]
             continue
         # Curve_CP_value = Alg_Data['Curve No. '+str(i+1)][ "Change Point Values "]
 
-        Curve_Potential = Alg_Data['Curve No. '+str(i+1)]['Raw Poetntial ']
-        Curve_Current = Alg_Data['Curve No. '+str(i+1)]['Raw Current']
+        Curve_Potential = Alg_Data[curve_key]['Raw Poetntial ']
+        Curve_Current = Alg_Data[curve_key].get(
+            'CPD Smoothed Current', Alg_Data[curve_key]['Raw Current']
+        )
 
         mask = np.ones(shape = len(Curve_Potential))
         mask[ int(Curve_CP_index[1]): int(Curve_CP_index[0])] = 0#be consist with boundary calculation 
@@ -355,10 +356,10 @@ def cal_baselines(  args ):
             (baseline, para), error = get_algo_instance(fitting_alg, Curve_Potential,Curve_Current,Fit_Order,Num_Iter,weight)
             if error:
                 print(Alg_File_Name,fitting_alg,error)
-            elif np.isnan(baseline[0]):  #avoid NaN in json file
+            elif len(baseline) != len(Curve_Current) or not np.all(np.isfinite(baseline)):
                 print(Alg_File_Name,fitting_alg,'is Nan'  )
             else:
-                data_file['Curve No. '+str(i+1)][fitting_alg] = list(baseline)
+                data_file[curve_key][fitting_alg] = list(baseline)
 
     return (Alg_File_Name, data_file)
 
