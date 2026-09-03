@@ -174,7 +174,8 @@
             font-size: 18px;
             font-weight: 600;
         }
-        .parameter-field input {
+        .parameter-field input,
+        .parameter-field select {
             box-sizing: border-box;
             width: 100%;
             min-height: 44px;
@@ -184,7 +185,15 @@
             background-color: white;
             font-size: 18px;
         }
+        .parameter-help {
+            display: block;
+            margin-top: 7px;
+            color: #555;
+            font-size: 15px;
+            line-height: 1.35;
+        }
         .parameter-field input:focus-visible,
+        .parameter-field select:focus-visible,
         .run-button:focus-visible {
             outline: 3px solid #015db6;
             outline-offset: 2px;
@@ -335,6 +344,13 @@
         <form id="analysisForm">
             <h2 id="analysisParametersHeading">Enter The Parameters</h2>
             <div class="parameter-field">
+                <label for="measurementType">Measurement Type:</label>
+                <select id="measurementType" name="measurementType">
+                    <option value="swv" selected>SWV</option>
+                    <option value="cv">CV</option>
+                </select>
+            </div>
+            <div class="parameter-field">
                 <label for="successWeight">Success Weight:</label>
                 <input
                     type="number"
@@ -361,13 +377,31 @@
                 >
             </div>
             <div class="parameter-field">
+                <label for="peakCount">Peak Number in Signal:</label>
+                <input
+                    type="number"
+                    id="peakCount"
+                    name="peakCount"
+                    min="1"
+                    step="1"
+                    value="1"
+                    required
+                    aria-describedby="peakCountHelp"
+                >
+                <small id="peakCountHelp" class="parameter-help">
+                    1 uses single-peak analysis. Any positive integer greater than 1
+                    uses shared multi-peak analysis with <strong id="changePointCount">3</strong>
+                    change point(s): three for each peak.
+                </small>
+            </div>
+            <div class="parameter-field">
                 <label for="Threshold">Peak Width Threshold:</label>
                 <input
                     type="number"
                     id="Threshold"
                     name="Threshold"
                     min="0.2"
-                    max="0.85"
+                    max="0.99"
                     step="0.01"
                     value="0.65"
                     required
@@ -454,6 +488,9 @@
         const analysisProgressPercent = document.getElementById("analysisProgressPercent");
         const analysisProgressText = document.getElementById("analysisProgressText");
         const analysisError = document.getElementById("analysisError");
+        const measurementTypeInput = document.getElementById("measurementType");
+        const peakCountInput = document.getElementById("peakCount");
+        const changePointCount = document.getElementById("changePointCount");
         const analysisStatusURL = "/post_exp/upload/data/status";
         const analysisFallbackURL = "/post_exp/pass";
         const activeAnalysisStates = new Set(["pending", "starting", "validating", "running"]);
@@ -461,6 +498,22 @@
         const failedAnalysisStates = new Set(["failed", "error"]);
         let analysisPollGeneration = 0;
         let analysisRedirecting = false;
+
+        function updateChangePointCount() {
+            const peaks = Number(peakCountInput.value);
+            changePointCount.textContent = Number.isInteger(peaks) && peaks > 0
+                ? String(peaks * 3)
+                : "—";
+        }
+
+        function updateMeasurementControls() {
+            const isCV = measurementTypeInput.value === "cv";
+            if (isCV) {
+                peakCountInput.value = "1";
+            }
+            peakCountInput.disabled = isCV;
+            updateChangePointCount();
+        }
 
         function normalizedAnalysisState(data) {
             if (data && typeof data.state === "string") {
@@ -488,15 +541,9 @@
             const percent = Number.isFinite(parsedPercent)
                 ? Math.min(100, Math.max(0, parsedPercent))
                 : Number(analysisProgressBar.value) || 0;
-            const completedFiles = Number(data.completed_files);
-            const totalFiles = Number(data.total_files);
             let message = typeof data.message === "string" && data.message.trim()
                 ? data.message.trim()
                 : "Analysis is running...";
-
-            if (Number.isFinite(completedFiles) && Number.isFinite(totalFiles) && totalFiles > 0) {
-                message += ` (${completedFiles}/${totalFiles} files)`;
-            }
 
             analysisProgressContainer.hidden = false;
             analysisProgressBar.value = percent;
@@ -589,8 +636,10 @@
             }
 
             const payload = {
+                measurementType: document.getElementById("measurementType").value,
                 successWeight: Number(document.getElementById("successWeight").value),
                 noiseLevel: Number(document.getElementById("noiseLevel").value),
+                peakCount: Number(document.getElementById("peakCount").value),
                 Threshold: Number(document.getElementById("Threshold").value),
             };
 
@@ -636,6 +685,9 @@
         }
 
         analysisForm.addEventListener("submit", launchDataAnalysis);
+        measurementTypeInput.addEventListener("change", updateMeasurementControls);
+        peakCountInput.addEventListener("input", updateChangePointCount);
+        updateMeasurementControls();
         void resumeAnalysisIfRunning();
 
     </script>

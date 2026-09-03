@@ -5,7 +5,7 @@ A-PACE is a local GUI application for electrochemical data analysis. It combines
 The application can:
 
 - import CSV and PalmSens `.pssession` files;
-- analyze electrochemical curves and edit their metadata;
+- analyze SWV and single-cycle CV curves and edit their metadata;
 - render interactive 2D and 3D Plotly charts; and
 - review and classify results as pass or fail.
 
@@ -183,6 +183,16 @@ bash start_flask.sh
 
 - Do not run real-time sensing and post-experiment analysis at the same time.
 - File and folder selection opens native `tkinter` dialogs on the machine running A-PACE.
+- Each application launch starts with an empty **Uploaded Files** list. Files selected during that run remain listed when refreshing or revisiting the page. This resets the selection only; source files and saved analysis results remain available.
+- In **Fail → Update Graphs Range**, selecting any multi-peak result opens a separate left/right potential range for every peak of that source curve, including peaks on other pages or in Pass. Edit ranges in low-to-high potential order; ranges must not overlap and must leave background samples at both outer ends. The complete group is recalculated once with the shared baseline and all 30 multi-peak algorithms. Invalid ranges or a failed shared fit leave saved results intact. Single-peak and CV selections retain the common two-boundary editor.
+- Multi-peak graphs in **Pass** and **Fail** show both CP boundaries of every peak in the same source curve, including peaks on other pages or with a different review status. Matching colors and `P1-L` / `P1-R` labels identify each pair. Current edited boundaries take precedence; if a peak has no valid current range, its original outer detected CPs appear as dotted lines with an explanatory hover label. The middle detected CP is not drawn.
+- Each multi-peak graph also marks every valid peak from that source curve using its saved potential and baseline-corrected height. `P1`, `P2`, and later peak markers use the same colors as their CP boundaries. Peaks without a valid result are omitted; single-peak and CV plots retain their individual peak marker and current sign.
+- On the **Upload Files** page, choose **SWV** or **CV** for the complete batch. CV accepts the existing A-PACE/PalmSens formats and standard CSV files with `Potential_V` plus either `Current_A` or `Current_uA`; an optional `Sequence` column is retained. `Current_A` is converted to µA before analysis.
+- CV preprocessing skips the fixed start/end sample trimming used for SWV. Standard CSV, A-PACE CSV, and `.pssession` inputs keep the complete scan range, including both endpoints and the shared turnaround point. Smoothing and manual CP-range updates retain the full branch length; the selected CP interval limits peak measurement, not the stored raw curve.
+- A CV curve must contain one complete scan cycle with exactly one potential-direction reversal. A-PACE preserves the scan endpoints, averages consecutive samples at an identical potential, includes the turnaround sample in both branches, and names the logical results `<file>_oxidation` and `<file>_reduction`. Each branch is analyzed independently as a single peak. `Peak Value` is the positive peak height; `Signed Peak Current` keeps the electrochemical sign. Both interactive plots and diagnostic PNGs retain the measured current polarity. Standard CSV files without a measurement timestamp leave that field blank.
+- CV uses the existing CPD and baseline-fitting pipeline, with baseline screening tolerances of 0.12 for the above-baseline fraction and normalized weighted mean squared error, validated on the four ferri/ferrocyanide reference curves. SWV retains its 0.10 tolerances. This is a peak-extraction workflow; it does not establish electrochemical reversibility.
+- For **SWV**, set **Peak Number in Signal** to the number expected in each curve. It defaults to 1 and accepts any positive integer; CV fixes it at 1 per branch. A-PACE automatically requests three change points per peak. Multi-peak results are listed from low to high potential as `<file name>-First`, `<file name>-Second`, and so on; a one-peak SWV analysis keeps the original file name.
+- For multi-peak analysis (`peak_count > 1`), each of the 30 approved algorithms is fitted once using only the outermost left and right background wings. The same candidate baseline is screened against every peak, and only the intersection is aggregated into the shared baseline and 99% confidence interval. There is no independent per-peak fallback. Curves are distributed across the available CPU cores while one logical core is left for Windows and the GUI. Per-run diagnostic PNG files are grouped under `Fig_Saved/Shared_Outer_Wing_Baselines/`.
 - Keep `Algorithm Setting.json` and the `pspython/` directory in the project root.
 - Analysis state is stored locally; use the application's download action before moving or replacing a working directory.
 

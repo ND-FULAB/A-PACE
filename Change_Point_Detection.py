@@ -84,8 +84,9 @@ def get_algo_instance(model_search, model_cost, data):
         raise ValueError(f"Unknown model search method: {model_search}")
 
 
+def _validated_cpd_inputs(Alg_X, Alg_y, Alg_Thre_Factor):
+    """Validate and normalise inputs shared by single- and multi-peak CPD."""
 
-def CPD( Alg_X, Alg_y, SM, CF, Alg_Thre_Factor, Alg_smooth_level = 2 ):
     Alg_X = np.asarray(Alg_X, dtype=float)
     Alg_y = np.asarray(Alg_y, dtype=float)
     if Alg_X.ndim != 1 or Alg_y.ndim != 1:
@@ -99,11 +100,18 @@ def CPD( Alg_X, Alg_y, SM, CF, Alg_Thre_Factor, Alg_smooth_level = 2 ):
     if np.any(np.diff(Alg_X) == 0):
         raise ValueError("potential values must not contain adjacent duplicates")
     try:
-        Alg_Thre_Factor = float(Alg_Thre_Factor)
+        threshold = float(Alg_Thre_Factor)
     except (TypeError, ValueError) as exc:
         raise ValueError("peak-region threshold must be numeric") from exc
-    if not np.isfinite(Alg_Thre_Factor) or not 0 < Alg_Thre_Factor <= 1:
+    if not np.isfinite(threshold) or not 0 < threshold <= 1:
         raise ValueError("peak-region threshold must be in (0, 1]")
+    return Alg_X, Alg_y, threshold
+
+
+def CPD( Alg_X, Alg_y, SM, CF, Alg_Thre_Factor, Alg_smooth_level = 2 ):
+    Alg_X, Alg_y, Alg_Thre_Factor = _validated_cpd_inputs(
+        Alg_X, Alg_y, Alg_Thre_Factor
+    )
 
     Alg_Thre_Factor_min = 0.2
     smoothed = smooth_signal(Alg_y, Alg_smooth_level, polyorder=3)
@@ -232,5 +240,91 @@ def CPD( Alg_X, Alg_y, SM, CF, Alg_Thre_Factor, Alg_smooth_level = 2 ):
     
     
     return (CP_info_boundary_smooth, CP_info_boundary_smooth_value,smoothed)
+
+
+def CPD_multi(
+    Alg_X,
+    Alg_y,
+    SM,
+    CF,
+    Alg_Thre_Factor,
+    Alg_peak_count,
+    Alg_smooth_level=2,
+):
+    """Detect ``3 * Alg_peak_count`` CPs and split them into peak regions.
+
+    Ruptures adds the terminal sample to its prediction.  That terminal marker
+    is deliberately excluded before the remaining change points are divided
+    into consecutive groups of three.  Each returned region retains all three
+    detected CPs for auditing and exposes the first/last CP as the editable
+    peak boundaries used by the rest of A-PACE.
+    """
+
+    if isinstance(Alg_peak_count, bool) or not isinstance(
+        Alg_peak_count, (int, np.integer)
+    ):
+        raise ValueError("peak count must be a positive integer")
+    peak_count = int(Alg_peak_count)
+    if peak_count < 1:
+        raise ValueError("peak count must be a positive integer")
+
+    potential, current, threshold = _validated_cpd_inputs(
+        Alg_X, Alg_y, Alg_Thre_Factor
+    )
+    smoothed = smooth_signal(current, Alg_smooth_level, polyorder=3)
+    derivative_signal = derivative(potential, smoothed)
+    change_point_count = peak_count * 3
+    if change_point_count >= len(derivative_signal):
+        raise ValueError(
+            f"{peak_count} peak(s) require {change_point_count} change points, "
+            f"but this curve has only {len(potential)} samples"
+        )
+
+    algorithm = get_algo_instance(SM, CF, derivative_signal)
+    prediction = algorithm.predict(n_bkps=change_point_count)
+    if not prediction or int(prediction[-1]) != len(derivative_signal):
+        raise RuntimeError(
+            "change-point detection did not return the expected terminal marker"
+        )
+    detected = [int(index) for index in prediction[:-1]]
+    if len(detected) != change_point_count:
+        raise RuntimeError(
+            f"change-point detection returned {len(detected)} points; "
+            f"expected {change_point_count}"
+        )
+    if detected != sorted(set(detected)) or any(
+        index <= 0 or index >= len(potential) for index in detected
+    ):
+        raise RuntimeError("change-point detection returned invalid point indexes")
+
+    minimum_fraction = 0.2 / peak_count
+    regions = []
+    for offset in range(0, change_point_count, 3):
+        cp_indexes = tuple(detected[offset : offset + 3])
+        lower_index, _, upper_index = cp_indexes
+        region_fraction = (upper_index - lower_index) / len(potential)
+        valid = minimum_fraction <= region_fraction <= threshold
+        boundary_indexes = (upper_index, lower_index) if valid else (0, 0)
+        boundary_values = (
+            (float(potential[lower_index]), float(potential[upper_index]))
+            if valid
+            else (float(potential[0]), float(potential[0]))
+        )
+        regions.append(
+            {
+                "change_point_indexes": cp_indexes,
+                "change_point_values": tuple(
+                    float(potential[index]) for index in cp_indexes
+                ),
+                "boundary_indexes": boundary_indexes,
+                "boundary_values": boundary_values,
+                "valid": valid,
+            }
+        )
+
+    # Name peaks from low to high potential so First/Second remain stable even
+    # when a source instrument records its scan in the opposite direction.
+    regions.sort(key=lambda region: region["change_point_values"][1])
+    return regions, smoothed
 
 

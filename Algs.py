@@ -1,6 +1,44 @@
 import pybaselines 
 
 
+# Complete algorithm set used for independent multi-peak fitting.  These are
+# the 30 methods evaluated by alg_selection/Alg_cal.py.  Every method accepts
+# initial weights; the multi-peak caller also inpaints excluded peaks so that
+# iterative reweighting cannot reintroduce the measured peak signal.
+MULTI_PEAK_BASELINE_ALGORITHMS = (
+    "goldindec",
+    "imodpoly",
+    "modpoly",
+    "poly",
+    "quant_reg",
+    "penalized_poly",
+    "irsqr",
+    "mixture_model",
+    "pspline_airpls",
+    "pspline_arpls",
+    "pspline_aspls",
+    "pspline_derpsalsa",
+    "pspline_drpls",
+    "pspline_iarpls",
+    "pspline_mpls",
+    "pspline_psalsa",
+    "airpls",
+    "arpls",
+    "aspls",
+    "derpsalsa",
+    "drpls",
+    "iarpls",
+    "psalsa",
+    "cwt_br",
+    "dietrich",
+    "fabc",
+    "fastchrom",
+    "golotvin",
+    "rubberband",
+    "std_distribution",
+)
+
+
 def get_algo_instance(Alg,Alg_X, Alg_Data, Alg_Fit_Order, Alg_Num_Iter, Alg_Weight):
     # def gaussian(x, a1, x1, sigma1,a2, x2, sigma2,b0):
     #     return a1 * np.exp(-(x - x1)**2 / (2 * sigma1**2)) + a2 * np.exp(-(x - x2)**2 / (2 * sigma2**2))  + b0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import ast
 import json
 import logging
@@ -18,6 +19,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
+from filelock import FileLock, Timeout
 from flask import (
     Flask,
     Response,
@@ -32,6 +34,7 @@ from plotly.offline import get_plotlyjs
 from plotly.subplots import make_subplots
 
 import Change_Point_Detection
+import CPD_change
 import demo
 from CPD_change import process_file
 from storage import (
@@ -53,6 +56,7 @@ from storage import (
 
 
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -71,6 +75,7 @@ PEAK_WIDTH_KEY = "Peak Width at Half Maximum"
 PEAK_POTENTIAL_LOCATION_KEY = "Peak Potential Location"
 PAGE_SIZE = 15
 PALETTE = px.colors.qualitative.Pastel
+MULTI_PEAK_COLORS = ("#9467bd", "#ff7f0e", "#17becf", "#8c564b", "#e377c2")
 
 _analysis_lock = threading.Lock()
 _analysis_status_lock = threading.Lock()
@@ -170,8 +175,8 @@ def _analysis_parameters(
         raise ValueError("noiseLevel must be an integer from 1 to 3.")
 
     threshold = _finite_number(payload, "Threshold", 0.65)
-    if not 0.2 <= threshold <= 0.85:
-        raise ValueError("Peak Width Threshold must be between 0.2 and 0.85.")
+    if not 0.2 <= threshold <= 0.99:
+        raise ValueError("Peak Width Threshold must be between 0.2 and 0.99.")
 
     sliding_window: int | None = None
     if realtime:
@@ -181,6 +186,28 @@ def _analysis_parameters(
             raise ValueError("SlidingWindow must be an integer from 1 to 50.")
 
     return weight, noise_level, threshold, sliding_window
+
+
+def _peak_count(payload: dict[str, Any]) -> int:
+    """Read the post-experiment peak count (three CPs are used per peak)."""
+
+    raw_value = payload.get("peakCount", 1)
+    if isinstance(raw_value, bool):
+        raise ValueError("peakCount must be a positive integer.")
+    value = _finite_number(payload, "peakCount", 1)
+    peak_count = int(value)
+    if value != peak_count or peak_count < 1:
+        raise ValueError("peakCount must be a positive integer.")
+    return peak_count
+
+
+def _measurement_type(payload: dict[str, Any]) -> str:
+    """Read the electrochemical measurement type for batch analysis."""
+
+    measurement_type = payload.get("measurementType", "swv")
+    if not isinstance(measurement_type, str) or measurement_type not in {"swv", "cv"}:
+        raise ValueError("measurementType must be either 'swv' or 'cv'.")
+    return measurement_type
 
 
 def algorithm_key(success_weight: float) -> str:
@@ -572,6 +599,10 @@ def analyze():
 
         payload = _json_object()
         weight, noise, threshold, _ = _analysis_parameters(payload)
+        peak_count = _peak_count(payload)
+        measurement_type = _measurement_type(payload)
+        if measurement_type == "cv" and peak_count != 1:
+            raise ValueError("CV analysis requires peakCount to be 1.")
         _set_analysis_status("running", 5, "Validating selected files...")
         uploaded = read_json(UPLOADED_FILES_PATH, {"csv": [], "pssession": []})
         if not isinstance(uploaded, dict):
@@ -591,12 +622,21 @@ def analyze():
             total_files=total_files,
         )
         selected, fitting = _algorithm_settings(weight)
+        analysis_fitting = (
+            list(demo.MULTI_PEAK_BASELINE_ALGORITHMS)
+            if peak_count > 1
+            else fitting
+        )
         write_json(
             PARAMETERS_PATH,
             {
                 "successWeight": weight,
                 "noiseLevel": noise,
                 "Threshold": threshold,
+                "measurementType": measurement_type,
+                "peakCount": peak_count,
+                "changePointCount": peak_count * 3,
+                "baselineAlgorithmCount": len(analysis_fitting),
             },
         )
         input_data = {
@@ -629,8 +669,10 @@ def analyze():
             selected["CPD Cost Function"],
             threshold,
             noise,
-            fitting,
+            analysis_fitting,
             progress_callback=report_progress,
+            peak_count=peak_count,
+            measurement_type=measurement_type,
         )
         _set_analysis_status(
             "running",
@@ -767,6 +809,17 @@ def _curve_arrays(curve_data: dict[str, Any]) -> tuple[list[float], list[float],
         return [], [], []
     if len(baseline) != len(current):
         baseline = []
+    original_current = _number_list(curve_data.get("Original Raw Current"))
+    if len(original_current) == len(current):
+        try:
+            multiplier = int(curve_data.get("Current Sign Multiplier", 1))
+        except (TypeError, ValueError):
+            multiplier = 1
+        if multiplier not in {-1, 1}:
+            multiplier = 1
+        current = original_current
+        if baseline:
+            baseline = [value * multiplier for value in baseline]
     return potential, current, baseline
 
 
@@ -781,7 +834,85 @@ def _baseline_half_width(curve_data: dict[str, Any], length: int) -> tuple[list[
     return [abs(value) for value in values], label
 
 
-def build_graph(file_name: str, curve_no: str, curve_data: dict[str, Any]) -> tuple[go.Figure, list[float]]:
+def _multi_peak_graph_key(curve_no: str, curve_data: dict[str, Any]):
+    source = curve_data.get(demo.SOURCE_FILE_KEY)
+    number = curve_data.get(demo.PEAK_NUMBER_KEY)
+    if (
+        not isinstance(source, str)
+        or not source
+        or isinstance(number, bool)
+        or not isinstance(number, int)
+        or number < 1
+        or curve_data.get("CV Scan Direction") in {"oxidation", "reduction"}
+    ):
+        return None
+    return source, curve_no
+
+
+def _graph_peak_point(curve: dict[str, Any]):
+    """Read a finite, measured peak position and height from a saved result."""
+
+    try:
+        height = float(curve.get("Peak Value ", 0))
+        current = float(curve.get("Signed Peak Current", height))
+        potential = float(curve.get("Peak Location: "))
+    except (TypeError, ValueError):
+        return None
+    if height <= 0 or current == 0 or not all(
+        math.isfinite(value) for value in (height, current, potential)
+    ):
+        return None
+    return {"potential": potential, "current": current}
+
+
+def _multi_peak_graph_annotations(results: dict[str, Any]):
+    """Collect all source-curve boundaries and peaks before status/page filtering."""
+
+    groups = {}
+    peak_groups = {}
+    for file_name, curves in results.items():
+        if not isinstance(curves, dict):
+            continue
+        for curve_no, curve in curves.items():
+            if not isinstance(curve, dict):
+                continue
+            key = _multi_peak_graph_key(curve_no, curve)
+            if key is None:
+                continue
+            potential = _number_list(curve.get("Raw Poetntial "))
+            if not potential:
+                continue
+            minimum, maximum = min(potential), max(potential)
+            point = _graph_peak_point(curve)
+            if point is not None and minimum <= point["potential"] <= maximum:
+                peak_groups.setdefault(key, []).append({
+                    **point,
+                    "peak_number": curve[demo.PEAK_NUMBER_KEY],
+                })
+            for field in ("Change Point Values ", demo.DETECTED_CP_VALUES_KEY):
+                values = _number_list(curve.get(field))
+                if len(values) >= 2 and minimum <= min(values) < max(values) <= maximum:
+                    groups.setdefault(key, []).append({
+                        "file_name": file_name,
+                        "peak_number": curve[demo.PEAK_NUMBER_KEY],
+                        "values": [min(values), max(values)],
+                        "detected": field == demo.DETECTED_CP_VALUES_KEY,
+                    })
+                    break
+    for boundaries in groups.values():
+        boundaries.sort(key=lambda boundary: boundary["peak_number"])
+    for points in peak_groups.values():
+        points.sort(key=lambda point: point["peak_number"])
+    return groups, peak_groups
+
+
+def build_graph(
+    file_name: str,
+    curve_no: str,
+    curve_data: dict[str, Any],
+    peak_boundaries: list[dict[str, Any]] | None = None,
+    peak_markers: list[dict[str, Any]] | None = None,
+) -> tuple[go.Figure, list[float]]:
     potential, current, baseline = _curve_arrays(curve_data)
     if not potential:
         raise ValueError(f"{file_name} / {curve_no} has invalid raw arrays.")
@@ -850,39 +981,93 @@ def build_graph(file_name: str, curve_no: str, curve_data: dict[str, Any]) -> tu
             )
         )
 
-    for change_point in _number_list(curve_data.get("Change Point Values ")):
-        fig.add_vline(x=change_point, line={"color": "red", "width": 1})
-
-    peak_value = curve_data.get("Peak Value ", 0)
-    peak_location = curve_data.get("Peak Location: ")
-    try:
-        if float(peak_value) != 0 and peak_location is not None:
-            fig.add_trace(
-                go.Scatter(
-                    x=[float(peak_location)],
-                    y=[float(peak_value)],
-                    mode="markers+text",
-                    text=[f"{float(peak_value):.2f}"],
-                    textposition="top center",
-                    name="Peak",
-                    marker={"color": "green", "size": 10},
+    if peak_boundaries is None:
+        for change_point in _number_list(curve_data.get("Change Point Values ")):
+            fig.add_vline(x=change_point, line={"color": "red", "width": 1})
+    else:
+        for boundary in peak_boundaries:
+            number = boundary["peak_number"]
+            color = MULTI_PEAK_COLORS[(number - 1) % len(MULTI_PEAK_COLORS)]
+            detected = boundary["detected"]
+            for side, change_point in zip(("L", "R"), boundary["values"]):
+                fig.add_vline(
+                    x=change_point,
+                    line={"color": color, "width": 1.5, "dash": "dot" if detected else "dash"},
                 )
-            )
-    except (TypeError, ValueError):
-        pass
+                fig.add_annotation(
+                    x=change_point,
+                    y=1 if side == "L" else 0.94,
+                    yref="paper",
+                    text=f"P{number}-{side}",
+                    showarrow=False,
+                    xanchor="left" if side == "L" else "right",
+                    yanchor="top",
+                    font={"size": 10, "color": color},
+                    bgcolor="rgba(255,255,255,0.8)",
+                    hovertext=(
+                        f"Peak {number} {'left' if side == 'L' else 'right'} "
+                        f"{'original detected CP' if detected else 'current CP boundary'}: "
+                        f"{change_point:.6g} V"
+                    ),
+                )
 
+    if peak_markers is None:
+        point = _graph_peak_point(curve_data)
+        peak_markers = [point] if point is not None else []
+    for point in peak_markers:
+        number = point.get("peak_number")
+        name = f"Peak {number}" if number is not None else "Peak"
+        color = (
+            MULTI_PEAK_COLORS[(number - 1) % len(MULTI_PEAK_COLORS)]
+            if number is not None else "green"
+        )
+        label = (
+            f"P{number}: {point['current']:.4g}"
+            if number is not None else f"{point['current']:.2f}"
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=[point["potential"]],
+                y=[point["current"]],
+                mode="markers+text",
+                text=[label],
+                textposition="top center",
+                textfont={"color": color},
+                name=name,
+                marker={"color": color, "size": 10},
+                hovertemplate=(
+                    name + "<br>Potential: %{x:.6g} V"
+                    "<br>Peak current: %{y:.6g} µA<extra></extra>"
+                ),
+            )
+        )
+
+    is_cv_branch = curve_data.get("CV Scan Direction") in {"oxidation", "reduction"}
+    title = (
+        {"text": f"{Path(file_name).name}<br>{curve_no}", "font": {"size": 12}}
+        if is_cv_branch
+        else f"{file_name} - {curve_no}"
+    )
     fig.update_layout(
-        title=f"{file_name} - {curve_no}",
+        title=title,
         xaxis_title="Potential (V)",
         yaxis_title="Current (µA)",
-        margin={"l": 20, "r": 20, "t": 40, "b": 20},
+        margin={"l": 20, "r": 20, "t": 60 if is_cv_branch else 40, "b": 20},
     )
     return fig, peak_curve
 
 
-def draw_graph(file_name: str, curve_no: str, curve_data: dict[str, Any]):
+def draw_graph(
+    file_name: str,
+    curve_no: str,
+    curve_data: dict[str, Any],
+    peak_boundaries: list[dict[str, Any]] | None = None,
+    peak_markers: list[dict[str, Any]] | None = None,
+):
     try:
-        fig, peak_curve = build_graph(file_name, curve_no, curve_data)
+        fig, peak_curve = build_graph(
+            file_name, curve_no, curve_data, peak_boundaries, peak_markers
+        )
         potential, _, _ = _curve_arrays(curve_data)
         half_width, _ = _baseline_half_width(curve_data, len(peak_curve))
         lower = [value - width for value, width in zip(peak_curve, half_width)]
@@ -911,11 +1096,17 @@ def _graph_summary(
     if not potential:
         return None
     peak_curve = [raw - mean for raw, mean in zip(current, baseline)] if baseline else []
+    try:
+        peak_height = float(curve_data.get("Peak Value "))
+        if not math.isfinite(peak_height):
+            raise ValueError
+    except (TypeError, ValueError):
+        peak_height = max(peak_curve) if peak_curve else 0
     concentration = curve_data.get("Concentration", curve_data.get("Concentration "))
     return {
         "file_name": file_name,
         "curve_no": curve_no,
-        "peak_height": max(peak_curve) if peak_curve else 0,
+        "peak_height": peak_height,
         "frequency": curve_data.get("Frequence ", 0),
         "concentration": concentration,
         "_curve_data": curve_data,
@@ -924,7 +1115,9 @@ def _graph_summary(
 
 def _status_graphs(status: str) -> list[dict[str, Any]]:
     graphs: list[dict[str, Any]] = []
-    for file_name, curves in load_results().items():
+    results = load_results()
+    grouped_boundaries, grouped_peaks = _multi_peak_graph_annotations(results)
+    for file_name, curves in results.items():
         if not isinstance(curves, dict):
             continue
         for curve_no, curve_data in curves.items():
@@ -936,6 +1129,10 @@ def _status_graphs(status: str) -> list[dict[str, Any]]:
                 continue
             graph = _graph_summary(file_name, curve_no, curve_data)
             if graph:
+                key = _multi_peak_graph_key(curve_no, curve_data)
+                if key is not None:
+                    graph["_peak_boundaries"] = grouped_boundaries.get(key, [])
+                    graph["_peak_markers"] = grouped_peaks.get(key, [])
                 graphs.append(graph)
     return graphs
 
@@ -944,11 +1141,13 @@ def _render_graphs(summaries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rendered: list[dict[str, Any]] = []
     for summary in summaries:
         graph_html, _, _, lower, upper = draw_graph(
-            summary["file_name"], summary["curve_no"], summary["_curve_data"]
+            summary["file_name"], summary["curve_no"], summary["_curve_data"],
+            peak_boundaries=summary.get("_peak_boundaries"),
+            peak_markers=summary.get("_peak_markers"),
         )
         if graph_html is None:
             continue
-        graph = {key: value for key, value in summary.items() if key != "_curve_data"}
+        graph = {key: value for key, value in summary.items() if not key.startswith("_")}
         graph.update({"html": graph_html, "ci_lower_peak": lower, "ci_upper_peak": upper})
         rendered.append(graph)
     return rendered
@@ -1149,6 +1348,19 @@ def overlay_graphs():
             if not baseline:
                 continue
             peak_curve = [raw - mean for raw, mean in zip(current, baseline)]
+            if curve.get("Peak Number") is not None:
+                indexes = curve.get("Change Point Indexes ")
+                if isinstance(indexes, (list, tuple)) and len(indexes) >= 2:
+                    try:
+                        lower_index, upper_index = sorted(
+                            (int(indexes[0]), int(indexes[1]))
+                        )
+                    except (TypeError, ValueError):
+                        pass
+                    else:
+                        if 0 <= lower_index < upper_index < len(potential):
+                            potential = potential[lower_index : upper_index + 1]
+                            peak_curve = peak_curve[lower_index : upper_index + 1]
             fig.add_trace(
                 go.Scatter(
                     x=potential,
@@ -1184,6 +1396,99 @@ def _curve_index(curve_no: str) -> int:
     return index
 
 
+def _range_edit_groups(results, references):
+    """Collect complete source curves, including sibling peaks on other pages."""
+
+    groups = []
+    seen = set()
+    for file_name, curve_no in references:
+        _curve_index(curve_no)
+        curve = results.get(file_name, {}).get(curve_no)
+        if not isinstance(curve, dict):
+            raise ValueError(f"Unknown graph: {file_name} / {curve_no}")
+        source = curve.get(demo.SOURCE_FILE_KEY)
+        is_multi = source is not None
+        if is_multi and (not isinstance(source, str) or not source):
+            raise ValueError(f"Invalid source file for {file_name} / {curve_no}")
+        group_key = (is_multi, source or file_name, curve_no)
+        if group_key in seen:
+            continue
+        seen.add(group_key)
+        if is_multi:
+            siblings = CPD_change._shared_sibling_curves(results, source, curve_no)
+            if len(siblings) < 2:
+                raise ValueError(f"Multi-peak results are incomplete: {source} / {curve_no}")
+        else:
+            siblings = [(1, file_name, curve)]
+
+        peaks = []
+        for number, sibling_name, sibling in siblings:
+            potential = _number_list(sibling.get("Raw Poetntial "))
+            if not potential:
+                raise ValueError(f"No valid potential data: {sibling_name} / {curve_no}")
+            minimum, maximum = min(potential), max(potential)
+            left = right = None
+            for key in ("Change Point Values ", demo.DETECTED_CP_VALUES_KEY):
+                values = _number_list(sibling.get(key))
+                if len(values) >= 2 and minimum <= min(values) < max(values) <= maximum:
+                    left, right = min(values), max(values)
+                    break
+            peaks.append({
+                "file_name": sibling_name,
+                "curve_no": curve_no,
+                "peak_number": number,
+                "left_val": left,
+                "right_val": right,
+                "potential_min": minimum,
+                "potential_max": maximum,
+                "status": _normalise_status(
+                    sibling.get(REVIEW_STATUS_KEY), sibling.get("Peak Value ", 0)
+                ),
+            })
+        groups.append({
+            "source_file": source or file_name,
+            "curve_no": curve_no,
+            "is_multi_peak": is_multi,
+            "peaks": peaks,
+        })
+    return groups
+
+
+@app.route("/post_exp/graph_ranges", methods=["POST"])
+def graph_ranges():
+    """Return editable ranges without modifying saved analysis results."""
+
+    try:
+        references = _graph_references(_json_object())
+        groups = _range_edit_groups(load_results(persist_migration=False), references)
+        response = jsonify(groups=groups)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except (ValueError, StorageError) as exc:
+        return jsonify(error=str(exc)), 400
+
+
+def _requested_graph_ranges(payload):
+    """Accept individual ranges or the original one-range batch request."""
+
+    if "ranges" in payload:
+        raw_ranges = payload["ranges"]
+        references = _graph_references({"graphs": raw_ranges})
+    else:
+        references = _graph_references(payload)
+        raw_ranges = [payload] * len(references)
+    edits = {}
+    for reference, raw_range in zip(references, raw_ranges):
+        if reference in edits:
+            raise ValueError("Each graph may have only one range in a request.")
+        left = _finite_number(raw_range, "left_val", float("nan"))
+        right = _finite_number(raw_range, "right_val", float("nan"))
+        if left >= right:
+            raise ValueError("left_val must be less than right_val.")
+        edits[reference] = [left, right]
+    return edits
+
+
 @app.route("/post_exp/update_graphs", methods=["POST"])
 def update_graphs():
     if not _analysis_lock.acquire(blocking=False):
@@ -1193,36 +1498,51 @@ def update_graphs():
             if _realtime_process is not None and _realtime_process.poll() is None:
                 return jsonify(error="Real-time analysis is already running."), 409
         payload = _json_object()
-        references = _graph_references(payload)
-        left = _finite_number(payload, "left_val", float("nan"))
-        right = _finite_number(payload, "right_val", float("nan"))
-        if left >= right:
-            raise ValueError("left_val must be less than right_val.")
+        edits = _requested_graph_ranges(payload)
 
         parameters = read_json(PARAMETERS_PATH, {})
         if not isinstance(parameters, dict):
             raise ValueError("Saved analysis parameters are invalid.")
         weight, noise, _, _ = _analysis_parameters(parameters)
         _, fitting = _algorithm_settings(weight)
-
         working = load_results(persist_migration=False)
-        for file_name, curve_no in references:
-            if curve_no not in working.get(file_name, {}):
-                raise ValueError(f"Unknown graph: {file_name} / {curve_no}")
-            process_file(
-                (
-                    file_name,
-                    _curve_index(curve_no),
-                    [left, right],
-                    fitting,
-                    noise,
-                ),
-                data_result=working,
-                persist=False,
-            )
+        groups = _range_edit_groups(working, list(edits))
+        updated_references = []
+        for group in groups:
+            peaks = group["peaks"]
+            curve_no = group["curve_no"]
+            replacements = {
+                peak["file_name"]: edits[(peak["file_name"], curve_no)]
+                for peak in peaks if (peak["file_name"], curve_no) in edits
+            }
+            if group["is_multi_peak"]:
+                CPD_change.process_multi_peak_ranges(
+                    (
+                        peaks[0]["file_name"], _curve_index(curve_no), replacements,
+                        list(demo.MULTI_PEAK_BASELINE_ALGORITHMS), noise,
+                    ),
+                    data_result=working,
+                    persist=False,
+                )
+                updated_references.extend((peak["file_name"], curve_no) for peak in peaks)
+            else:
+                file_name = peaks[0]["file_name"]
+                process_file(
+                    (file_name, _curve_index(curve_no), replacements[file_name], fitting, noise),
+                    data_result=working,
+                    persist=False,
+                )
+                updated_references.append((file_name, curve_no))
         write_json(RESULTS_PATH, working)
         initialize_data_table(working)
-        return jsonify(success=True, updated=len(references))
+        passed = sum(
+            working[file_name][curve_no].get(REVIEW_STATUS_KEY) == "pass"
+            for file_name, curve_no in updated_references
+        )
+        return jsonify(
+            success=True, updated=len(updated_references),
+            passed=passed, failed=len(updated_references) - passed,
+        )
     except (ValueError, KeyError, RuntimeError, StorageError, OSError) as exc:
         logging.exception("Graph update failed")
         return jsonify(error=str(exc)), 400
@@ -1418,5 +1738,28 @@ def download_results():
     )
 
 
+def main(port: int = 5000) -> None:
+    """Start a new desktop session with an empty batch-file selection."""
+
+    UPLOADED_FILES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    server_lock = FileLock(
+        str(UPLOADED_FILES_PATH.parent / f"apace-server-{port}.lock"), timeout=0
+    )
+    try:
+        server_lock.acquire()
+    except Timeout as exc:
+        raise SystemExit(
+            f"A-PACE is already running on port {port}. "
+            f"Open http://127.0.0.1:{port} or stop that instance before restarting."
+        ) from exc
+    try:
+        write_json(UPLOADED_FILES_PATH, {"csv": [], "pssession": []})
+        app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False, threaded=True)
+    finally:
+        server_lock.release()
+
+
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", debug=False, use_reloader=False, threaded=True)
+    argument_parser = argparse.ArgumentParser(description=__doc__)
+    argument_parser.add_argument("--port", type=int, default=5000)
+    main(port=argument_parser.parse_args().port)

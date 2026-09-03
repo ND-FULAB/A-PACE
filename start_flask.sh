@@ -10,4 +10,4 @@ if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/
     exit 1
 fi
 
-exec python -m flask --app app run --host 127.0.0.1 --port "$PORT"
+exec python app.py --port "$PORT"
