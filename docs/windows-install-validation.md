@@ -72,6 +72,6 @@ git commit -m "Update and validate Windows installation"
 git push -u origin HEAD
 ```
 
-Merge the branch into `main` through your normal review process to update the README's online one-command installation. New installations then download the fixed script and source. Existing installations continue to reuse their local files, preserving saved analysis data.
+Merge the branch into `main` through your normal review process to update the ZIP linked from the README. New downloads then include the fixed script and source. Existing installations continue to reuse their local files, preserving saved analysis data.
 
 Keep `.git/`, `.venv/`, `.install-test/`, caches, and local analysis output out of distributable source ZIPs. The prepared Git checkout retains `.git/` for development; its companion source ZIP excludes Git metadata and test environments.
