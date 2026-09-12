@@ -10,7 +10,7 @@ Requires Windows 10/11 x64, Internet access, and .NET Framework 4.7.2 or newer. 
 
 1. [Download A-PACE as a ZIP](https://github.com/ND-FULAB/A-PACE/archive/refs/heads/main.zip).
 2. Extract the entire ZIP to a writable folder, then open the folder containing `install_APACE.bat`.
-3. Double-click **`install_APACE.bat`** and wait for A-PACE to open in your browser.
+3. Right-click **`install_APACE.bat`**, choose **Run as administrator**, and wait for A-PACE to open in your browser.
 
 The installer prepares Python and the required packages, checks Tk/PalmSens, and starts A-PACE. The video reuses Python and uv already on the computer; a first installation can take several minutes.
 
