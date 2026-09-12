@@ -47,6 +47,22 @@ If the script reports that .NET Framework is missing, it opens Microsoft's .NET 
 
 For later use, either run the same command again or paste `%USERPROFILE%\A-PACE` into the File Explorer address bar and double-click `run_APACE.bat`. Repeating the setup reuses a complete existing installation and does not delete saved analysis data. You can [review the setup script](install_APACE.ps1) before running it.
 
+### Install a downloaded ZIP or Git checkout
+
+Extract the complete ZIP to a writable folder, or open your Git checkout, then double-click **`install_APACE.bat`**. This uses the installation script and application files in that folder, installs Python and the locked dependencies, verifies Tk/PalmSens, and starts A-PACE. Internet access is required for the initial runtime and dependency downloads. You do not need to install Python, Git, or uv first.
+
+Keep the installation window open while using A-PACE. For later launches, double-click `run_APACE.bat`. If another A-PACE instance is already using port 5000, stop it before launching this copy.
+
+To install or recheck the current folder without starting the application, run this from its PowerShell window:
+
+```powershell
+.\install_APACE.bat -SkipLaunch
+```
+
+For a preview of the setup steps, use `install_APACE.bat -DryRun`. The batch entry point preserves the installer's exit code, including when setup fails. Its execution-policy and module-path settings apply only to the process it starts.
+
+Maintainers can use [the Windows installation validation notes](docs/windows-install-validation.md) to review the first-install fix, repeat the checks, and prepare a Git update. The online command above downloads the script from `main`; local edits become available through that command after they are published to `main`. Repeating setup reuses existing application files; update a Git checkout with Git before rerunning setup to apply changed dependencies.
+
 ### Manual setup (if the one-command setup fails)
 
 Windows 10/11 x64 is the supported installation path. Run the commands below in PowerShell. Administrator privileges are normally required only when installing system prerequisites.

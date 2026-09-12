@@ -7,3 +7,6 @@ venv/
 database/
 /Desktop/
 Fig_Saved/
+
+# Local installation validation artifacts
+.install-test/

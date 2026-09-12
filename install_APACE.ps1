@@ -137,7 +137,9 @@ function Invoke-External {
         return
     }
 
-    & $FilePath @Arguments
+    # Keep native installer messages visible without returning them as function
+    # output. Install-Uv must return only the resolved uv executable path.
+    & $FilePath @Arguments | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "$Description failed with exit code $LASTEXITCODE. Read the message above, then run the A-PACE setup command again."
     }
