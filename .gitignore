@@ -8,5 +8,9 @@ database/
 /Desktop/
 Fig_Saved/
 
+# Generated real-time analysis outputs
+/output_data_temp.csv
+/output_plot.png
+
 # Local installation validation artifacts
 .install-test/
