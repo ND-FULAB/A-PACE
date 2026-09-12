@@ -44,6 +44,16 @@ On 2026-09-10, a source ZIP was built from this checkout's Git-visible files and
 
 The source archive's executable files are checked against the tested package's SHA-256 manifest. Only this validation document is updated after execution to record the results. First installation still requires Internet access and the supported Windows/.NET prerequisites; this is a source distribution, not an offline bundle.
 
+## Downloaded DLL follow-up
+
+The original installer at `f4306d9` prepared `pspython/*.dll` only at the end of `Install-APaceFiles`. An existing extracted ZIP skipped this download branch, so its DLL source marks remained. A browser-downloaded copy failed with `0x80131515` after Python and all 43 dependencies had installed successfully.
+
+`Initialize-APaceLibraries` now runs after either project-directory branch and before Python checks. It validates both bundled DLLs against fixed SHA-256 values before clearing either source mark. Missing or modified files fail validation; other DLLs, scripts, user data, and system policies are untouched. Review and update these expected hashes whenever intentionally changing the bundled SDK.
+
+The added existing-ZIP regression failed against the previous script. With the fix, 111 related tests passed, including existing-folder setup, repeat installation, missing/modified DLL rejection, preservation of unrelated source marks, and DryRun behavior. The actual demonstration copy also completed Tk/PalmSens loading, dependency validation, and eight HTTP page checks after repair.
+
+These checks cover DLL preparation and application startup. They do not establish that Windows Smart App Control permits an Internet-marked batch entry point to start through File Explorer. Keep that distribution check separate from the .NET DLL test.
+
 ## Preparing the Git update
 
 Review the complete change before committing:

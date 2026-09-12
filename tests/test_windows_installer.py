@@ -41,6 +41,12 @@ $env:TEMP = $env:APACE_INSTALLER_TEST_TEMP
         encoding="utf-8",
     )
     environment = os.environ.copy()
+    # Let Windows PowerShell discover its own modules even when pytest was
+    # launched from PowerShell 7.
+    for name in list(environment):
+        if name.upper() == "PSMODULEPATH":
+            environment.pop(name)
+    environment["PSModulePath"] = str(powershell.parent / "Modules")
     environment["APACE_INSTALLER_UNDER_TEST"] = str(ROOT / "install_APACE.ps1")
     environment["APACE_INSTALLER_TEST_TEMP"] = str(tmp_path)
     return subprocess.run(
@@ -136,3 +142,95 @@ exit $TestExitCode
     )
     assert result.returncode == exit_code, result.stdout + result.stderr
     assert "PASS: installed the bundled source directory" in result.stdout
+
+
+LIBRARY_NAMES = ("PalmSens.Core.dll", "PalmSens.Core.Windows.dll")
+INTERNET_ZONE = "[ZoneTransfer]\r\nZoneId=3\r\n"
+
+
+def prepare_downloaded_libraries(tmp_path):
+    libraries = tmp_path / "pspython"
+    libraries.mkdir()
+    for name in LIBRARY_NAMES:
+        shutil.copyfile(ROOT / "pspython" / name, libraries / name)
+        Path(str(libraries / name) + ":Zone.Identifier").write_bytes(INTERNET_ZONE.encode("ascii"))
+    # Files outside the two bundled libraries must retain their source marks.
+    for path in (libraries / "user-plugin.dll", tmp_path / "install_APACE.bat"):
+        path.write_text("user file")
+        Path(str(path) + ":Zone.Identifier").write_bytes(INTERNET_ZONE.encode("ascii"))
+    return libraries
+
+
+def test_existing_zip_setup_prepares_libraries_before_running_python(tmp_path):
+    libraries = prepare_downloaded_libraries(tmp_path)
+    result = run_installer_functions(
+        tmp_path,
+        r"""
+$InstallDirectory = $env:APACE_INSTALLER_TEST_TEMP
+$SkipLaunch = $true
+function Assert-SupportedWindows {}
+function Assert-DotNetFramework {}
+function Resolve-Uv { return 'uv.exe' }
+function Get-MissingProjectItems { return @() }
+$script:pythonCalls = 0
+function Invoke-External {
+    param($FilePath, $Arguments, $Description)
+    foreach ($name in @('PalmSens.Core.dll', 'PalmSens.Core.Windows.dll')) {
+        $dll = Join-Path $InstallDirectory "pspython\$name"
+        if (Get-Item -LiteralPath $dll -Stream Zone.Identifier -ErrorAction SilentlyContinue) {
+            throw "Python ran before the bundled library was prepared: $name"
+        }
+    }
+    $script:pythonCalls++
+}
+Start-APaceSetup
+Start-APaceSetup
+if ($script:pythonCalls -ne 8) { throw 'Setup did not run all dependency and integration checks twice' }
+Write-Output 'PASS: existing ZIP and repeat installation prepared libraries'
+""",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PASS: existing ZIP and repeat installation prepared libraries" in result.stdout
+    for name in LIBRARY_NAMES:
+        assert (libraries / name).read_bytes() == (ROOT / "pspython" / name).read_bytes()
+    for path in (libraries / "user-plugin.dll", tmp_path / "install_APACE.bat"):
+        assert Path(str(path) + ":Zone.Identifier").read_text() == INTERNET_ZONE.replace("\r\n", "\n")
+
+
+@pytest.mark.parametrize("problem", ["modified", "missing"])
+def test_library_verification_failure_preserves_all_remaining_source_marks(tmp_path, problem):
+    libraries = prepare_downloaded_libraries(tmp_path)
+    invalid_library = libraries / LIBRARY_NAMES[1]
+    if problem == "modified":
+        with invalid_library.open("ab") as output:
+            output.write(b"unexpected modification")
+    else:
+        invalid_library.unlink()
+    result = run_installer_functions(
+        tmp_path,
+        r"""
+Initialize-APaceLibraries $env:APACE_INSTALLER_TEST_TEMP
+""",
+    )
+    assert result.returncode != 0
+    expected_message = "failed SHA-256 verification" if problem == "modified" else "library is missing"
+    assert expected_message in result.stdout + result.stderr
+    for path in (libraries / LIBRARY_NAMES[0], libraries / "user-plugin.dll", tmp_path / "install_APACE.bat"):
+        assert Path(str(path) + ":Zone.Identifier").exists()
+    if problem == "modified":
+        assert Path(str(invalid_library) + ":Zone.Identifier").exists()
+
+
+def test_library_dry_run_preserves_download_marks(tmp_path):
+    libraries = prepare_downloaded_libraries(tmp_path)
+    result = run_installer_functions(
+        tmp_path,
+        r"""
+$DryRun = $true
+Initialize-APaceLibraries $env:APACE_INSTALLER_TEST_TEMP
+""",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "[dry run]" in result.stdout
+    for name in LIBRARY_NAMES:
+        assert Path(str(libraries / name) + ":Zone.Identifier").exists()

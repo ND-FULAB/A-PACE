@@ -51,6 +51,10 @@ For later use, either run the same command again or paste `%USERPROFILE%\A-PACE`
 
 Extract the complete ZIP to a writable folder, or open your Git checkout, then double-click **`install_APACE.bat`**. This uses the installation script and application files in that folder, installs Python and the locked dependencies, verifies Tk/PalmSens, and starts A-PACE. Internet access is required for the initial runtime and dependency downloads. You do not need to install Python, Git, or uv first.
 
+Setup verifies both bundled PalmSens DLLs against the release's SHA-256 values before clearing their downloaded-file marks for local .NET loading. This also runs when reusing an existing folder. A missing or modified DLL stops setup; restore the official package before trying again.
+
+Windows Smart App Control may block a downloaded installation script before it starts. This is separate from the PalmSens DLL loading error below; the installer cannot repair an entry point that Windows prevents from starting.
+
 Keep the installation window open while using A-PACE. For later launches, double-click `run_APACE.bat`. If another A-PACE instance is already using port 5000, stop it before launching this copy.
 
 To install or recheck the current folder without starting the application, run this from its PowerShell window:
@@ -239,15 +243,15 @@ For a normal installation, do not regenerate the lockfile. Run `git pull` or dow
 
 ### PalmSens assembly is blocked on Windows
 
-If startup reports `System.IO.FileLoadException` or cannot load a PalmSens assembly, Windows may have marked the DLLs as downloaded files. In File Explorer, open `pspython/`, right-click each PalmSens DLL, select **Properties**, enable **Unblock** if shown, and apply the change.
-
-You can also unblock the DLLs from PowerShell in the project root:
+If startup reports `System.IO.FileLoadException` with `0x80131515`, Windows may have marked the DLLs as downloaded files. From the project root, rerun the updated installer to verify and prepare both `PalmSens.Core.dll` and `PalmSens.Core.Windows.dll`:
 
 ```powershell
-Get-ChildItem .\pspython\*.dll | Unblock-File
+.\install_APACE.bat -SkipLaunch
 ```
 
-Then rerun `uv run --locked python app.py`.
+For an older package, first confirm that the two DLLs came from the official A-PACE repository. In File Explorer, open `pspython/`, right-click **each** of these two DLLs, select **Properties**, enable **Unblock** if shown, and apply the change. Preparing only `PalmSens.Core.Windows.dll` does not resolve a source mark on `PalmSens.Core.dll`.
+
+Then restart A-PACE with `run_APACE.bat`. This file-specific procedure does not require changing the system execution policy or enabling .NET's `loadFromRemoteSources` setting.
 
 If the assembly still cannot load, confirm that .NET Framework 4.7.2 or newer is installed; the .NET Framework 4.8 Runtime is recommended.
 
