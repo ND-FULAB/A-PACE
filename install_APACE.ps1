@@ -206,6 +206,43 @@ function Get-MissingProjectItems {
     return @($missing)
 }
 
+function Initialize-APaceLibraries {
+    param([string]$ProjectDirectory)
+
+    Write-Step "Checking the bundled PalmSens libraries"
+    if ($DryRun) {
+        Write-Detail "[dry run] Verify the two bundled PalmSens DLLs and prepare them for local .NET loading"
+        return
+    }
+
+    # These hashes identify the SDK binaries shipped with this release. Update
+    # them only when intentionally updating and reviewing the bundled DLLs.
+    $expectedHashes = [ordered]@{
+        "PalmSens.Core.dll" = "32FE8E9C6E13A21F6DCA7FBD2F15B90AC396093E122F82679506197E7DA861ED"
+        "PalmSens.Core.Windows.dll" = "B2A59F20A65159749839F8D7774015CFB466CE4F229720E1B2D7D36B231491C5"
+    }
+    $verifiedPaths = @()
+    foreach ($entry in $expectedHashes.GetEnumerator()) {
+        $libraryPath = Join-Path (Join-Path $ProjectDirectory "pspython") $entry.Key
+        if (-not (Test-Path -LiteralPath $libraryPath -PathType Leaf)) {
+            throw "The bundled PalmSens library is missing: $libraryPath. Restore it from the official A-PACE package."
+        }
+        $actualHash = (Get-FileHash -LiteralPath $libraryPath -Algorithm SHA256).Hash
+        if ($actualHash -ne $entry.Value) {
+            throw "The bundled PalmSens library failed SHA-256 verification: $libraryPath. No libraries were unblocked. Restore the official A-PACE package before running setup again."
+        }
+        $verifiedPaths += $libraryPath
+    }
+
+    # Explorer preserves Internet source marks when extracting a downloaded ZIP.
+    # Verify every bundled DLL before changing any marks, including on reruns.
+    # Limit this operation to these exact files; leave other files and policies alone.
+    foreach ($libraryPath in $verifiedPaths) {
+        Unblock-File -LiteralPath $libraryPath -ErrorAction Stop
+        Write-Detail "Verified and prepared $(Split-Path -Leaf $libraryPath)"
+    }
+}
+
 function Install-APaceFiles {
     param([string]$Destination)
 
@@ -241,8 +278,6 @@ function Install-APaceFiles {
         }
 
         Move-Item -LiteralPath $extractedProject -Destination $Destination
-        Get-ChildItem -LiteralPath (Join-Path $Destination "pspython") -Filter "*.dll" -File |
-            Unblock-File -ErrorAction SilentlyContinue
     }
     finally {
         Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
@@ -294,6 +329,8 @@ function Start-APaceSetup {
             return
         }
     }
+
+    Initialize-APaceLibraries $resolvedInstallDirectory
 
     $originalDirectory = Get-Location
     try {
