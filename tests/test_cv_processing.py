@@ -16,20 +16,6 @@ from cv_processing import (
 )
 
 
-REAL_CV_DIRECTORY = (
-    Path(__file__).parents[1]
-    / "CV"
-    / "公开数据库_参考图相似数据"
-    / "04_Figshare_ferricyanide_4"
-)
-REAL_CV_FILES = [
-    "a_Bare_CPE.csv",
-    "b_ZnO_NPs_CPE.csv",
-    "c_Poly_glutamic_acid_CPE.csv",
-    "d_Poly_glutamic_acid_ZnO_NPs_CPE.csv",
-]
-
-
 @pytest.fixture
 def cv_tmp_path():
     """Use a workspace temp directory because the sandbox blocks pytest's 0700 temp."""
@@ -159,20 +145,37 @@ def test_derived_branch_filename_inserts_suffix_before_extension(cv_tmp_path):
     )
 
 
-@pytest.mark.parametrize("filename", REAL_CV_FILES)
-def test_four_reference_cv_files_split_into_expected_branches(filename):
-    branches = load_cv_branches(REAL_CV_DIRECTORY / filename)
+@pytest.mark.parametrize("samples", [51, 1001])
+@pytest.mark.parametrize("current_column", ["Current_A", "Current_uA"])
+def test_generated_cv_files_split_into_expected_branches(
+    cv_tmp_path, samples, current_column
+):
+    potential = np.concatenate(
+        (np.linspace(-0.2, 0.8, samples), np.linspace(0.8, -0.2, samples - 1)[1:])
+    )
+    current_ua = np.concatenate(
+        (
+            10 * np.sin(np.linspace(0, np.pi, samples)),
+            -8 * np.sin(np.linspace(0, np.pi, samples - 1)[1:]),
+        )
+    )
+    current = current_ua / 1e6 if current_column == "Current_A" else current_ua
+    source = _write_cv(cv_tmp_path, potential, current, current_column)
+
+    branches = load_cv_branches(source)
 
     assert [branch.scan_direction for branch in branches] == [
         "oxidation",
         "reduction",
     ]
-    assert [len(branch.potential) for branch in branches] == [1001, 1000]
+    assert [len(branch.potential) for branch in branches] == [samples, samples - 1]
     assert np.all(np.diff(branches[0].potential) > 0)
     assert np.all(np.diff(branches[1].potential) < 0)
     assert branches[0].derived_filename.endswith("_oxidation.csv")
     assert branches[1].derived_filename.endswith("_reduction.csv")
     assert branches[0].original_current is not branches[0].pipeline_current
+    np.testing.assert_allclose(branches[0].original_current, current_ua[:samples])
+    np.testing.assert_allclose(branches[1].original_current, current_ua[samples - 1:])
     assert branches[1].original_current.tolist() == pytest.approx(
         (-branches[1].pipeline_current).tolist()
     )
