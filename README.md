@@ -51,6 +51,8 @@ For later use, either run the same command again or paste `%USERPROFILE%\A-PACE`
 
 Extract the complete ZIP to a writable folder, or open your Git checkout, then double-click **`install_APACE.bat`**. This uses the installation script and application files in that folder, installs Python and the locked dependencies, verifies Tk/PalmSens, and starts A-PACE. Internet access is required for the initial runtime and dependency downloads. You do not need to install Python, Git, or uv first.
 
+Watch the [Windows ZIP installation video](docs/media/One_step_install.mp4) (25 seconds) for ZIP extraction, running `install_APACE.bat`, the integration check, and opening A-PACE in the browser. The recording reuses Python and uv already installed on the computer; a first installation that downloads them can take longer.
+
 Setup verifies both bundled PalmSens DLLs against the release's SHA-256 values before clearing their downloaded-file marks for local .NET loading. This also runs when reusing an existing folder. A missing or modified DLL stops setup; restore the official package before trying again.
 
 Windows Smart App Control may block a downloaded installation script before it starts. This is separate from the PalmSens DLL loading error below; the installer cannot repair an entry point that Windows prevents from starting.
