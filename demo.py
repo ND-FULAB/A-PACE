@@ -1914,7 +1914,7 @@ def data_analysis(
                             except Exception as legacy_error:
                                 raise ValueError(
                                     f"standard CV parser: {standard_error}; "
-                                    f"A-PACE CSV parser: {legacy_error}"
+                                    f"APACE CSV parser: {legacy_error}"
                                 ) from legacy_error
                     except Exception as error:
                         raise ValueError(

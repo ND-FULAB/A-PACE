@@ -11,7 +11,7 @@ set "APACE_EXIT_CODE=%ERRORLEVEL%"
 
 if not "%APACE_EXIT_CODE%"=="0" (
     echo.
-    echo A-PACE setup failed. Review the message above, then run install_APACE.bat again.
+    echo APACE setup failed. Review the message above, then run install_APACE.bat again.
     pause
 )
 

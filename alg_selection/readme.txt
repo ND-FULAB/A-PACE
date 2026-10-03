@@ -15,4 +15,4 @@ Selection:
 6. Run  Alg_select_10_1core.py and get peak heights for each signals
 7. Run alt_10_result.py and get peak heights for each signals
 8. Run Alg_setting_normalized.py to obtain the selection results based on 0-1.0 weight of SR
-9. Replace the 'Algorithm Setting.json' in A-PACE with the one from last step
+9. Replace the 'Algorithm Setting.json' in APACE with the one from last step
