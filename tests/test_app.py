@@ -191,7 +191,7 @@ def test_duplicate_startup_preserves_active_file_selection_and_results(
         write_json(paths["UPLOADED_FILES_PATH"], selected)
         original_selection = paths["UPLOADED_FILES_PATH"].read_bytes()
 
-        with pytest.raises(SystemExit, match="A-PACE is already running on port 5063"):
+        with pytest.raises(SystemExit, match="APACE is already running on port 5063"):
             webapp.main(port=5063)
 
         assert paths["UPLOADED_FILES_PATH"].read_bytes() == original_selection

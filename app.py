@@ -1749,7 +1749,7 @@ def main(port: int = 5000) -> None:
         server_lock.acquire()
     except Timeout as exc:
         raise SystemExit(
-            f"A-PACE is already running on port {port}. "
+            f"APACE is already running on port {port}. "
             f"Open http://127.0.0.1:{port} or stop that instance before restarting."
         ) from exc
     try:

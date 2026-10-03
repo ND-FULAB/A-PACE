@@ -32,10 +32,10 @@ function Assert-SupportedWindows {
         throw "This installer supports Windows only."
     }
     if ($PSVersionTable.PSVersion -lt [Version]"5.1") {
-        throw "A-PACE setup requires Windows PowerShell 5.1 or newer."
+        throw "APACE setup requires Windows PowerShell 5.1 or newer."
     }
     if (-not [Environment]::Is64BitOperatingSystem) {
-        throw "A-PACE requires 64-bit Windows."
+        throw "APACE requires 64-bit Windows."
     }
     if (-not [Environment]::Is64BitProcess) {
         throw "Open the 64-bit 'Windows PowerShell' application and run the command again."
@@ -44,10 +44,10 @@ function Assert-SupportedWindows {
         "PROCESSOR_ARCHITECTURE", "Machine"
     )
     if ($nativeArchitecture -and $nativeArchitecture -ne "AMD64") {
-        throw "A-PACE currently supports x64 Windows computers, not $nativeArchitecture."
+        throw "APACE currently supports x64 Windows computers, not $nativeArchitecture."
     }
     if ([Environment]::OSVersion.Version.Major -lt 10) {
-        throw "A-PACE requires Windows 10 or Windows 11."
+        throw "APACE requires Windows 10 or Windows 11."
     }
 }
 
@@ -83,7 +83,7 @@ function Assert-DotNetFramework {
         if (-not $DryRun) {
             Start-Process "https://dotnet.microsoft.com/en-us/download/dotnet-framework/net48"
         }
-        throw ".NET Framework 4.7.2 or newer is required. Install the .NET Framework 4.8 Runtime from the page that opened, restart Windows if requested, and then paste the same A-PACE command into PowerShell again."
+        throw ".NET Framework 4.7.2 or newer is required. Install the .NET Framework 4.8 Runtime from the page that opened, restart Windows if requested, and then paste the same APACE command into PowerShell again."
     }
     Write-Detail ".NET Framework 4.7.2 or newer is available."
 }
@@ -141,7 +141,7 @@ function Invoke-External {
     # output. Install-Uv must return only the resolved uv executable path.
     & $FilePath @Arguments | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        throw "$Description failed with exit code $LASTEXITCODE. Read the message above, then run the A-PACE setup command again."
+        throw "$Description failed with exit code $LASTEXITCODE. Read the message above, then run the APACE setup command again."
     }
 }
 
@@ -175,7 +175,7 @@ function Install-Uv {
 
     $uv = Resolve-Uv
     if (-not $uv) {
-        throw "uv was installed but uv.exe could not be found. Close PowerShell, open it again, and rerun the A-PACE setup command."
+        throw "uv was installed but uv.exe could not be found. Close PowerShell, open it again, and rerun the APACE setup command."
     }
     return $uv
 }
@@ -225,11 +225,11 @@ function Initialize-APaceLibraries {
     foreach ($entry in $expectedHashes.GetEnumerator()) {
         $libraryPath = Join-Path (Join-Path $ProjectDirectory "pspython") $entry.Key
         if (-not (Test-Path -LiteralPath $libraryPath -PathType Leaf)) {
-            throw "The bundled PalmSens library is missing: $libraryPath. Restore it from the official A-PACE package."
+            throw "The bundled PalmSens library is missing: $libraryPath. Restore it from the official APACE package."
         }
         $actualHash = (Get-FileHash -LiteralPath $libraryPath -Algorithm SHA256).Hash
         if ($actualHash -ne $entry.Value) {
-            throw "The bundled PalmSens library failed SHA-256 verification: $libraryPath. No libraries were unblocked. Restore the official A-PACE package before running setup again."
+            throw "The bundled PalmSens library failed SHA-256 verification: $libraryPath. No libraries were unblocked. Restore the official APACE package before running setup again."
         }
         $verifiedPaths += $libraryPath
     }
@@ -249,7 +249,7 @@ function Install-APaceFiles {
     $parentDirectory = Split-Path -Parent $Destination
     if ($DryRun) {
         Write-Detail "[dry run] Download $repositoryArchiveUrl"
-        Write-Detail "[dry run] Extract and validate A-PACE in $Destination"
+        Write-Detail "[dry run] Extract and validate APACE in $Destination"
         return
     }
 
@@ -262,19 +262,19 @@ function Install-APaceFiles {
     $archivePath = Join-Path $parentDirectory ($uniqueName + ".zip")
 
     try {
-        Write-Step "Downloading A-PACE"
+        Write-Step "Downloading APACE"
         Invoke-WebRequest -Uri $repositoryArchiveUrl -UseBasicParsing -OutFile $archivePath
         Expand-Archive -LiteralPath $archivePath -DestinationPath $stagingDirectory
 
         $extractedDirectories = @(Get-ChildItem -LiteralPath $stagingDirectory -Directory)
         if ($extractedDirectories.Count -ne 1) {
-            throw "The downloaded A-PACE archive has an unexpected folder structure."
+            throw "The downloaded APACE archive has an unexpected folder structure."
         }
 
         $extractedProject = $extractedDirectories[0].FullName
         $missing = @(Get-MissingProjectItems $extractedProject)
         if ($missing.Count -gt 0) {
-            throw "The A-PACE download is incomplete. Missing: $($missing -join ', ')"
+            throw "The APACE download is incomplete. Missing: $($missing -join ', ')"
         }
 
         Move-Item -LiteralPath $extractedProject -Destination $Destination
@@ -294,8 +294,8 @@ function Install-APaceFiles {
 
 function Start-APaceSetup {
     Write-Host ""
-    Write-Host "A-PACE automatic setup" -ForegroundColor Green
-    Write-Host "This window will remain open while A-PACE is running."
+    Write-Host "APACE automatic setup" -ForegroundColor Green
+    Write-Host "This window will remain open while APACE is running."
 
     Assert-SupportedWindows
     [Net.ServicePointManager]::SecurityProtocol =
@@ -311,14 +311,14 @@ function Start-APaceSetup {
     $expandedDirectory = [Environment]::ExpandEnvironmentVariables($InstallDirectory)
     $resolvedInstallDirectory = [IO.Path]::GetFullPath($expandedDirectory)
 
-    Write-Step "Preparing A-PACE in $resolvedInstallDirectory"
+    Write-Step "Preparing APACE in $resolvedInstallDirectory"
     if (Test-Path -LiteralPath $resolvedInstallDirectory) {
         if (-not (Test-Path -LiteralPath $resolvedInstallDirectory -PathType Container)) {
             throw "The install path exists but is not a folder: $resolvedInstallDirectory"
         }
         $missing = @(Get-MissingProjectItems $resolvedInstallDirectory)
         if ($missing.Count -gt 0) {
-            throw "The install folder already exists but is not a complete A-PACE installation. Rename that folder and run this command again. Missing: $($missing -join ', ')"
+            throw "The install folder already exists but is not a complete APACE installation. Rename that folder and run this command again. Missing: $($missing -join ', ')"
         }
         Write-Detail "Using the existing installation. Saved analysis data will not be deleted."
     }
@@ -339,8 +339,8 @@ function Start-APaceSetup {
         Write-Step "Installing Python 3.12"
         Invoke-External $uv @("python", "install", "3.12") "Installing Python 3.12"
 
-        Write-Step "Installing the locked A-PACE dependencies"
-        Invoke-External $uv @("sync", "--locked") "Installing A-PACE dependencies"
+        Write-Step "Installing the locked APACE dependencies"
+        Invoke-External $uv @("sync", "--locked") "Installing APACE dependencies"
         Invoke-External $uv @("run", "--locked", "python", "--version") "Checking Python"
 
         Write-Step "Checking the desktop and PalmSens integration"
@@ -350,7 +350,7 @@ function Start-APaceSetup {
         ) "Checking Tk and PalmSens"
 
         Write-Host ""
-        Write-Host "A-PACE installation is ready." -ForegroundColor Green
+        Write-Host "APACE installation is ready." -ForegroundColor Green
         Write-Detail "Install folder: $resolvedInstallDirectory"
 
         if ($SkipLaunch -or $DryRun) {
@@ -361,12 +361,12 @@ function Start-APaceSetup {
         $portInUse = [Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() |
             Where-Object { $_.Port -eq 5000 }
         if ($portInUse) {
-            throw "Port 5000 is already in use. Close the other program using it, then run the A-PACE command again."
+            throw "Port 5000 is already in use. Close the other program using it, then run the APACE command again."
         }
 
-        Write-Step "Starting A-PACE"
+        Write-Step "Starting APACE"
         Write-Detail "The browser will open automatically. If it does not, open $applicationUrl"
-        Write-Detail "Keep this window open. Press Ctrl+C here when you want to stop A-PACE."
+        Write-Detail "Keep this window open. Press Ctrl+C here when you want to stop APACE."
 
         $browserJob = Start-Job -ScriptBlock {
             param([string]$Url)
@@ -387,7 +387,7 @@ function Start-APaceSetup {
         try {
             & $uv run --locked python app.py
             if ($LASTEXITCODE -ne 0) {
-                throw "A-PACE stopped with exit code $LASTEXITCODE. Review the messages above."
+                throw "APACE stopped with exit code $LASTEXITCODE. Review the messages above."
             }
         }
         finally {
@@ -405,7 +405,7 @@ try {
 }
 catch {
     Write-Host ""
-    Write-Host "A-PACE setup could not finish." -ForegroundColor Red
+    Write-Host "APACE setup could not finish." -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
     Write-Host "Fix the item described above, then paste the same setup command into PowerShell again."
     throw
